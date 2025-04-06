@@ -1,7 +1,19 @@
 /* めっちゃオシャレなカスタムスタイル集だよ〜✨ */
 body {
-    font-family: 'Poppins', sans-serif;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-weight: 500;
     transition: background 0.5s ease;
+}
+
+/* 英数字と日本語でフォントを分ける */
+body, p, div, h1, h2, h3, h4, h5, h6, span, button, input, select, textarea {
+    font-family: 'Noto Sans JP', sans-serif;
+    font-weight: 500;
+}
+
+/* 英数字はInconsolataを優先的に使う */
+code, pre, .code-text, .monospace {
+    font-family: 'Inconsolata', monospace;
 }
 
 /* キラキラ要素💖 */

@@ -37,20 +37,54 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 🌈 カスタムCSS - ベージュ系のやさしいデザイン✨
+# 🌈 カスタムCSS - よりStreamlit要素に特化したフォント指定 ✨
 st.markdown("""
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;500;700&family=Noto+Sans+JP:wght@500&display=swap" rel="stylesheet">
+
 <style>
-    /* ✨ フォント設定 ✨ */
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Inconsolata:wght@400;500;700&display=swap');
-    
-    /* ベースとなる全体設定 */
-    html, body, [class*="css"] {
-        font-family: 'Noto Sans JP', sans-serif;
-        color: #3C3C3C;
+    /* 🌟 Streamlit全体のベースフォント設定 - これ超重要！🌟 */
+    @font-face {
+        font-family: 'Noto Sans JP';
+        src: url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@500&display=swap');
+        font-weight: 500;
     }
     
-    code, pre {
-        font-family: 'Inconsolata', monospace;
+    @font-face {
+        font-family: 'Inconsolata';
+        src: url('https://fonts.googleapis.com/css2?family=Inconsolata&display=swap');
+    }
+
+    /* ベースフォント設定 - セレクタの優先度を高めてStreamlitのデフォルトを確実に上書き */
+    .element-container, .stMarkdown, .stText, p, h1, h2, h3, span, div, label, 
+    .stTextInput > label, .stButton > button, .stRadio > div > label {
+        font-family: 'Noto Sans JP', sans-serif !important;
+        font-weight: 500 !important;
+    }
+    
+    /* 英数字はInconsolataを優先的に使うためのクラス */
+    code, pre, .code-text {
+        font-family: 'Inconsolata', monospace !important;
+    }
+    
+    /* Streamlitの特定要素にフォントを強制適用 */
+    .st-emotion-cache-16idsys p, .st-emotion-cache-16idsys, 
+    .st-emotion-cache-183lzff, .st-emotion-cache-10trblm, 
+    .st-emotion-cache-1erivf3, .st-emotion-cache-1gulkj7 {
+        font-family: 'Noto Sans JP', sans-serif !important;
+        font-weight: 500 !important;
+    }
+    
+    /* マークダウンコンテナ内の要素 */
+    [data-testid="stMarkdownContainer"] > * {
+        font-family: 'Noto Sans JP', sans-serif !important;
+        font-weight: 500 !important;
+    }
+    
+    /* 英数字を含む可能性が高い要素には両方のフォントを指定（Inconsolataが優先的に使われる） */
+    .status-message, .stMetricValue, pre, code, [data-testid="stMetricValue"] {
+        font-family: 'Inconsolata', 'Noto Sans JP', sans-serif !important;
     }
     
     /* ✨ 新しい色彩設定 ✨ */
@@ -77,11 +111,11 @@ st.markdown("""
         margin: 0 auto;
     }
     
-    /* タイトルスタイル */
+    /* タイトルスタイル - より強力なセレクタ */
     .main-title {
-        font-family: 'Noto Sans JP', sans-serif;
+        font-family: 'Noto Sans JP', sans-serif !important;
+        font-weight: 500 !important;
         font-size: 2.5em !important;
-        font-weight: 700;
         color: var(--accent-color);
         text-align: center;
         margin-bottom: 1.5em;
@@ -89,12 +123,12 @@ st.markdown("""
     }
     
     .sub-title {
-        font-family: 'Noto Sans JP', sans-serif;
+        font-family: 'Noto Sans JP', sans-serif !important;
+        font-weight: 500 !important;
         font-size: 1.3em !important;
         color: var(--accent-color);
         margin-top: 1em;
         margin-bottom: 0.5em;
-        font-weight: 600;
     }
     
     /* フォーム要素のスタイル */
@@ -106,7 +140,8 @@ st.markdown("""
         border: 1px solid var(--border-color) !important;
         border-radius: 6px;
         padding: 10px 14px;
-        font-family: 'Inconsolata', 'Noto Sans JP', sans-serif;
+        font-family: 'Inconsolata', 'Noto Sans JP', sans-serif !important;
+        font-weight: 500 !important;
         transition: border-color 0.3s ease;
         background-color: white !important;
     }
@@ -118,10 +153,10 @@ st.markdown("""
     
     /* セクションヘッダー */
     h3 {
-        font-family: 'Noto Sans JP', sans-serif;
+        font-family: 'Noto Sans JP', sans-serif !important;
+        font-weight: 500 !important;
         color: var(--text-color);
         font-size: 1.1em;
-        font-weight: 600;
         margin-top: 1.5em;
         margin-bottom: 0.8em;
     }
@@ -141,7 +176,7 @@ st.markdown("""
         font-size: 0.9em;
         color: var(--text-light);
         font-style: normal;
-        font-family: 'Inconsolata', monospace;
+        font-family: 'Inconsolata', monospace !important;
         margin-top: 16px;
     }
     
@@ -151,15 +186,16 @@ st.markdown("""
         margin-top: 3em;
         color: var(--text-light);
         font-size: 0.8em;
-        font-family: 'Inconsolata', 'Noto Sans JP', sans-serif;
+        font-family: 'Inconsolata', 'Noto Sans JP', sans-serif !important;
+        font-weight: 500 !important;
     }
     
     /* ボタンスタイル - ウォームブラウン */
     .stButton>button {
         background-color: var(--accent-color);
         color: white;
-        font-weight: 500;
-        font-family: 'Noto Sans JP', sans-serif;
+        font-weight: 500 !important;
+        font-family: 'Noto Sans JP', sans-serif !important;
         border: none;
         border-radius: 6px;
         padding: 0.6em 1em;
@@ -194,8 +230,8 @@ st.markdown("""
         padding: 8px 16px;
         transition: all 0.15s ease;
         margin: 0 !important;
-        font-family: 'Noto Sans JP', sans-serif;
-        font-weight: 400;
+        font-family: 'Noto Sans JP', sans-serif !important;
+        font-weight: 500 !important;
         font-size: 0.95em;
         color: var(--text-color);
     }
@@ -205,52 +241,47 @@ st.markdown("""
         background-color: rgba(139, 115, 85, 0.05);
         border-color: var(--accent-color);
         color: var(--accent-color);
-        font-weight: 500;
-    }
-    
-    /* ホバー時のスタイル */
-    div.row-widget.stRadio > div[role="radiogroup"] > label:hover {
-        border-color: var(--accent-light);
-        background-color: rgba(139, 115, 85, 0.02);
+        font-weight: 500 !important;
     }
     
     /* メッセージスタイル */
     div[data-testid="stCaptionContainer"] {
         color: var(--text-light) !important;
-        font-family: 'Noto Sans JP', sans-serif;
+        font-family: 'Noto Sans JP', sans-serif !important;
+        font-weight: 500 !important;
         font-size: 0.9em;
     }
     
-    /* 通知のスタイル */
-    .stAlert {
-        background-color: white;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-    }
-    
-    .stAlert [data-testid="stMarkdownContainer"] p {
-        font-family: 'Noto Sans JP', sans-serif;
-    }
-    
-    /* スピナーのスタイル */
-    div[data-testid="stSpinner"] > div {
-        border-top-color: var(--accent-color) !important;
-    }
-    
-    /* スピナーテキスト */
-    div[data-testid="stSpinner"] + div [data-testid="stMarkdownContainer"] p {
-        color: var(--text-light);
-        font-family: 'Noto Sans JP', sans-serif;
-        font-size: 0.95em;
-    }
-    
     /* サイドバーのスタイルも調整 */
-    .css-6qob1r.e1fqkh3o3 {
+    .css-6qob1r.e1fqkh3o3, .css-1544g2n.e1fqkh3o3 {
         background-color: var(--secondary-bg);
+    }
+    
+    /* Streamlitのすべての主要コンポーネントにフォントを適用 */
+    .stSlider, .stSelectbox, .stMultiselect, .stDateInput,
+    .stTextArea, .stNumberInput, .stFileUploader, .stTabs {
+        font-family: 'Noto Sans JP', sans-serif !important;
+        font-weight: 500 !important;
+    }
+    
+    /* データ表示要素（テーブルなど）にもフォント適用 */
+    .stDataFrame, .stDataEditor, .stTable, .stDataFrame td,
+    .stDataFrame th {
+        font-family: 'Inconsolata', 'Noto Sans JP', sans-serif !important;
+    }
+    
+    /* フォントを確実に適用するための最後の砦 - bodyタグからの継承を強制 */
+    body {
+        font-family: 'Noto Sans JP', sans-serif !important;
+        font-weight: 500 !important;
+    }
+    
+    /* 英数字の多い要素は別にクラス付けして処理 */
+    .english-text {
+        font-family: 'Inconsolata', monospace !important;
     }
 </style>
 """, unsafe_allow_html=True)
-
 
 # ====================🧚‍♀️ ここからYouTube字幕処理の関数だよ ====================
 
@@ -678,9 +709,17 @@ def main():
     if "cache" not in st.session_state:
         st.session_state.cache = {}  # 要約結果のキャッシュ
     
+    # フォントを強制的に読み込むための追加処理
+    st.markdown("""
+    <div style="position: absolute; opacity: 0; pointer-events: none">
+      <span style="font-family: 'Inconsolata', monospace">ABC</span>
+      <span style="font-family: 'Noto Sans JP', sans-serif">あいうえお</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
     # ==================== ヘッダーセクション ====================
     st.markdown('<h1 class="main-title">🎬 YouTube要約くん</h1>', unsafe_allow_html=True)
-    st.markdown("YouTubeビデオの内容をスマートに要約。URL入力だけでカンタンに使えます。")
+    st.markdown('<p style="font-family: \'Noto Sans JP\', sans-serif; font-weight: 500;">YouTubeビデオの内容をスマートに要約。URL入力だけでカンタンに使えます。</p>', unsafe_allow_html=True)
     
     # ==================== 入力セクション ====================
     col1 = st.columns([1])[0]
@@ -800,7 +839,7 @@ def main():
                       '</p>', unsafe_allow_html=True)
     
     # ==================== フッターセクション ====================
-    st.markdown('<div class="footer">Created with ❤️ by YouTube要約くん | ' + 
+    st.markdown('<div class="footer" style="font-family: \'Noto Sans JP\', sans-serif; font-weight: 500;">Created with ❤️ by YouTube要約くん | ' + 
               datetime.now().strftime('%Y') + '</div>', 
               unsafe_allow_html=True)
 
