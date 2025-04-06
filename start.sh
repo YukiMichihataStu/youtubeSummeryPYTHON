@@ -3,7 +3,7 @@
 # めっちゃ便利なサーバー起動スクリプト💖
 
 echo "✨ YouTube要約アプリ起動スクリプト ✨"
-echo "バックエンドとフロントエンドを同時に起動するでー！"
+echo "バックエンドとStreamlitフロントエンドを同時に起動するでー！"
 
 # ターミナルの色設定
 PINK='\033[0;35m'
@@ -16,19 +16,19 @@ sleep 1
 
 # バックエンド起動（バックグラウンド）
 echo -e "${BLUE}🚀 バックエンド起動中...${NC}"
-cd /Users/yukimichihata/youtubeSummery/backend
+cd /Users/yukimichihata/youtubeSummeryPYTHON/backend
 uvicorn main:app --reload --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 echo -e "${GREEN}✅ バックエンドのサーバー起動完了！(PID: $BACKEND_PID)${NC}"
 
 sleep 2
 
-# フロントエンド起動
-echo -e "${BLUE}💻 フロントエンド起動中...${NC}"
-cd /Users/yukimichihata/youtubeSummery/frontend
-python -m http.server 3000 &
+# Streamlitフロントエンド起動
+echo -e "${BLUE}💻 Streamlitフロントエンド起動中...${NC}"
+cd /Users/yukimichihata/youtubeSummeryPYTHON/frontend
+streamlit run app.py --server.port 3000 &
 FRONTEND_PID=$!
-echo -e "${GREEN}✅ フロントエンドのサーバー起動完了！(PID: $FRONTEND_PID)${NC}"
+echo -e "${GREEN}✅ Streamlitフロントエンド起動完了！(PID: $FRONTEND_PID)${NC}"
 
 echo -e "${PINK}🌟 全部準備完了！以下のURLでアクセスしてね：${NC}"
 echo -e "   フロントエンド: ${GREEN}http://localhost:3000${NC}"

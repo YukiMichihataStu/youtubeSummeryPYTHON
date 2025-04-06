@@ -35,7 +35,7 @@ YouTubeの動画を自動で要約するウェブアプリケーションだよ�
 2. 仮想環境を作成してアクティベート
    ```bash
    python -m venv venv
-   source venv_youtubeSummery/bin/activate   # Windowsの場合: venv\Scripts\activate
+   source venv/bin/activate   # Windowsの場合: venv\Scripts\activate
    ```
 
 3. 依存パッケージをインストール
@@ -51,29 +51,30 @@ YouTubeの動画を自動で要約するウェブアプリケーションだよ�
 
 ### 起動方法
 
+以下のどちらかの方法で起動できます：
+
+#### 方法1: 便利なスタートスクリプトを使用
+```bash
+./start.sh
+```
+
+#### 方法2: 個別に起動
+
 1. バックエンドサーバーを起動
-   # 方法①: backendディレクトリに移動してから起動する場合
    ```bash
    cd backend
    uvicorn main:app --reload
    ```
-   # 方法②: プロジェクトルートから直接起動する場合
-   ```bash
-   uvicorn backend.main:app --reload
-   ```
-   
+
 2. 別のターミナルでフロントエンドを起動
-   # 方法①: frontendディレクトリに移動してから起動する場合
    ```bash
    cd frontend
    streamlit run app.py
    ```
-   # 方法②: プロジェクトルートから直接起動する場合 (必要なら)
-   ```bash
-   streamlit run frontend/app.py
-   ```
 
-3. ブラウザで http://localhost:8501 にアクセス
+3. ブラウザで以下にアクセス:
+   - フロントエンド: http://localhost:3000 (スクリプト使用時) または http://localhost:8501 (個別起動時)
+   - バックエンドAPI: http://localhost:8000
 
 ## 🎮 使い方
 
