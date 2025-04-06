@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 # 🔐 環境変数からAPIキーを取得
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
-MAX_CAPTION_LENGTH = int(os.getenv("MAX_CAPTION_LENGTH", "15000"))  # ←ここやで！字幕制限は現在5000文字やで💁‍♀️
+MAX_CAPTION_LENGTH = int(os.getenv("MAX_CAPTION_LENGTH", "20000"))  # ←ここやで！字幕制限は20000文字に増やしたよ💁‍♀️
 MAX_RETRIES = 3
 RETRY_DELAY = 2
 
