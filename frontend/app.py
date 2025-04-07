@@ -4,7 +4,7 @@ import requests
 import streamlit as st
 import time
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 import dotenv
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
@@ -13,7 +13,7 @@ import json
 # 💖 .envファイルの読み込み（あれば）
 dotenv.load_dotenv()
 
-# ✨ かわいいロガーの設定だよ〜ん💕
+# ✨ かわいいロガーの設定だよ〜ん💕 - 詳細ログ表示のためにレベルをINFOに設定！
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] 💬 %(message)s",
@@ -28,6 +28,9 @@ YOUTUBE_URL_PATTERN = r'^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/)
 CACHE_EXPIRY = 24 * 60 * 60  # 24時間（秒）
 MAX_RETRIES = 3
 RETRY_DELAY = 2
+
+# 🆕 字幕キャッシュセッションキー
+CAPTION_CACHE_KEY = "youtube_caption_cache"
 
 # 🎨 ページスタイル設定
 st.set_page_config(
@@ -296,6 +299,14 @@ class CaptionFetchError(Exception):
     """字幕取得中のエラーを表すクラスだよ〜🚫"""
     pass
 
+class NoSubtitlesError(CaptionFetchError):
+    """動画に字幕がない場合のエラークラスよ〜😢"""
+    pass
+
+class RateLimitError(CaptionFetchError):
+    """レート制限に引っかかった時のエラークラス！⏱️"""
+    pass
+
 def extract_video_id(url: str) -> Optional[str]:
     """
     YouTubeのURLから動画IDを抽出する関数だよ〜🔍
@@ -318,7 +329,8 @@ def extract_video_id(url: str) -> Optional[str]:
 
 def fetch_captions(video_id: str) -> str:
     """
-    YouTube動画から字幕を取得するよ〜📝
+    YouTube動画から字幕を効率的に取得するよ〜📝
+    最適化バージョン：APIコール回数を大幅削減！✨
     
     引数:
         video_id (str): YouTube動画ID
@@ -327,44 +339,114 @@ def fetch_captions(video_id: str) -> str:
         str: 取得した字幕テキスト
         
     例外:
-        CaptionFetchError: 字幕取得に失敗した場合
+        NoSubtitlesError: 字幕がない場合
+        RateLimitError: レート制限に引っかかった場合
+        CaptionFetchError: その他の字幕取得エラー
     """
+    # 🆕 字幕キャッシュをチェック
+    if CAPTION_CACHE_KEY in st.session_state:
+        caption_cache = st.session_state[CAPTION_CACHE_KEY]
+        if video_id in caption_cache:
+            cache_data = caption_cache[video_id]
+            # キャッシュの有効期限をチェック
+            if time.time() - cache_data["timestamp"] < CACHE_EXPIRY:
+                logger.info(f"🎉 字幕キャッシュヒット！動画ID: {video_id}")
+                return cache_data["caption_text"]
+            else:
+                logger.info(f"⏰ 字幕キャッシュ期限切れ: {video_id}")
+    else:
+        # キャッシュ初期化
+        st.session_state[CAPTION_CACHE_KEY] = {}
+        logger.info("🏁 字幕キャッシュを初期化したよ")
+    
     try:
-        logger.info(f"🔄 字幕取得開始: {video_id}")
+        logger.info(f"🎬 動画ID: {video_id} の字幕取得開始！")
         
-        # まずは日本語字幕を試す、なければ英語、それでもなければ利用可能な字幕
-        languages = ['ja', 'en']
-        transcript = None
-        errors = []
-        
-        # 優先言語で試してみる
-        for lang in languages:
-            try:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[lang])
-                logger.info(f"✅ {lang}の字幕を取得できたよ！")
-                break
-            except (TranscriptsDisabled, NoTranscriptFound) as e:
-                errors.append(f"{lang}: {str(e)}")
-                continue
-        
-        # 優先言語で見つからなかった場合は利用可能な字幕を取得
-        if transcript is None:
-            try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-                # 自動生成字幕があるか確認
-                for transcript_item in transcript_list:
-                    if transcript_item.is_generated:
-                        transcript = transcript_item.fetch()
-                        logger.info("📝 自動生成字幕を取得したよ！")
+        # 🌟 効率化ポイント：一度のAPIコールで全字幕情報を取得 🌟
+        try:
+            # API呼び出し回数を減らすため、まず利用可能な字幕リストを1回で取得
+            # この1回のAPIコールで、後続の字幕取得処理の効率が大幅アップ！
+            logger.info(f"📋 利用可能な字幕リストを取得中...")
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            available_languages = [t.language for t in transcript_list]
+            logger.info(f"✅ 利用可能な字幕言語: {available_languages}")
+            
+            # 手動字幕のみを抽出して優先言語順にソート
+            manual_transcripts = [t for t in transcript_list if not t.is_generated]
+            manual_languages = [t.language for t in manual_transcripts]
+            logger.info(f"📚 手動字幕言語: {manual_languages}")
+            
+            # 自動生成字幕を抽出
+            generated_transcripts = [t for t in transcript_list if t.is_generated]
+            generated_languages = [t.language for t in generated_transcripts]
+            logger.info(f"🤖 自動生成字幕言語: {generated_languages}")
+            
+            # 優先順位で字幕を取得: 日本語手動 > 英語手動 > 日本語自動 > 英語自動 > その他
+            transcript = None
+            selected_lang = None
+            
+            # 優先言語リスト
+            priority_langs = ['ja', 'ja-JP', 'en', 'en-US', 'en-GB']
+            
+            # 1. 手動字幕から優先言語を探す
+            for lang in priority_langs:
+                for t in manual_transcripts:
+                    if t.language_code == lang or t.language == lang:
+                        transcript = t.fetch()
+                        selected_lang = f"{t.language} (手動)"
+                        logger.info(f"💎 優先言語の手動字幕が見つかった: {t.language}")
                         break
+                if transcript:
+                    break
+            
+            # 2. 手動字幕が見つからなければ、どの言語でも手動字幕を使う
+            if not transcript and manual_transcripts:
+                transcript = manual_transcripts[0].fetch()
+                selected_lang = f"{manual_transcripts[0].language} (手動)"
+                logger.info(f"📝 手動字幕を使用: {manual_transcripts[0].language}")
+            
+            # 3. 手動字幕がなければ、自動生成字幕から優先言語を探す
+            if not transcript:
+                for lang in priority_langs:
+                    for t in generated_transcripts:
+                        if t.language_code == lang or t.language == lang:
+                            transcript = t.fetch()
+                            selected_lang = f"{t.language} (自動生成)"
+                            logger.info(f"🤖 優先言語の自動生成字幕が見つかった: {t.language}")
+                            break
+                    if transcript:
+                        break
+            
+            # 4. どれも見つからなければ、最初の自動生成字幕を使用
+            if not transcript and generated_transcripts:
+                transcript = generated_transcripts[0].fetch()
+                selected_lang = f"{generated_transcripts[0].language} (自動生成)"
+                logger.info(f"🔄 自動生成字幕を使用: {generated_transcripts[0].language}")
                 
-                # 自動生成がなければ、最初に見つかる字幕を使う
-                if transcript is None and len(transcript_list) > 0:
-                    transcript = transcript_list[0].fetch()
-                    logger.info(f"📝 {transcript_list[0].language}の字幕を取得したよ！")
-            except Exception as e:
-                errors.append(f"自動生成: {str(e)}")
-                raise CaptionFetchError(f"字幕取得失敗: {', '.join(errors)}")
+            # 字幕が見つからない場合
+            if not transcript:
+                logger.error("😱 字幕が1つも見つからなかった！")
+                raise NoSubtitlesError("この動画には字幕がないみたい…他の動画を試してみてね！😢")
+                
+            logger.info(f"✨ 字幕取得成功: {selected_lang}")
+                
+        except (TranscriptsDisabled, NoTranscriptFound) as e:
+            # 字幕が無効または見つからない場合の専用エラー
+            logger.error(f"😢 字幕なしエラー: {str(e)}")
+            error_message = "この動画には字幕がないみたい…他の動画を試してみてね！😢"
+            raise NoSubtitlesError(error_message)
+            
+        except Exception as e:
+            error_str = str(e).lower()
+            
+            # レート制限の検出（エラーメッセージから判断）
+            if "429" in error_str or "too many" in error_str or "rate limit" in error_str:
+                logger.error(f"⏱️ レート制限エラー検出: {str(e)}")
+                raise RateLimitError("YouTubeのAPIレート制限に達しちゃった！しばらく待ってから試してね💦")
+                
+            # それ以外の一般的なエラー
+            logger.error(f"🚨 字幕取得中の一般エラー: {str(e)}")
+            raise CaptionFetchError(f"字幕取得中にエラーが発生したわ😭: {str(e)}")
         
         # 字幕テキストの結合
         if transcript:
@@ -376,17 +458,28 @@ def fetch_captions(video_id: str) -> str:
                 caption_text = ' '.join([t['text'].replace('\n', ' ') for t in transcript])
                 
                 logger.info(f"📊 字幕取得完了: 文字数={len(caption_text)}")
+                
+                # 字幕をキャッシュに保存
+                st.session_state[CAPTION_CACHE_KEY][video_id] = {
+                    "caption_text": caption_text,
+                    "timestamp": time.time(),
+                    "language": selected_lang
+                }
+                
                 return caption_text
         else:
-            raise CaptionFetchError("字幕が見つからないわ〜😢")
+            logger.error("😱 字幕処理後に内容が空になった")
+            raise NoSubtitlesError("字幕が見つからないか、処理中にエラーが発生したわ〜😢")
             
+    except (NoSubtitlesError, RateLimitError):
+        # 特殊なエラーは上位に伝播させるよ
+        raise
     except Exception as e:
         error_msg = f"YouTube字幕取得エラー: {str(e)}"
-        logger.error(f"🚨 {error_msg}")
+        logger.error(f"🚨 予期せぬエラー: {error_msg}")
         raise CaptionFetchError(error_msg)
     
     return ""
-
 
 # ====================✨ ここから要約生成の関数だよ ====================
 
@@ -686,7 +779,6 @@ def get_cache_key(url: str, options: Dict[str, str]) -> str:
     options_str = "_".join([f"{k}:{v}" for k, v in sorted(options.items())])
     return f"{url}_{options_str}"
 
-# 動画を要約する関数を追加（バックエンドAPIの代わりになる）
 def summarize_video(url: str, options: Dict[str, str]) -> Dict[str, Any]:
     """
     YouTubeビデオを要約する関数だよ〜✨
@@ -702,30 +794,46 @@ def summarize_video(url: str, options: Dict[str, str]) -> Dict[str, Any]:
         # YouTubeのビデオIDを抽出
         video_id = extract_video_id(url)
         if not video_id:
+            logger.error(f"🚫 無効なURL: {url}")
             raise ValueError("YouTubeのURLから動画IDを取得できへんかった😭")
         
-        # 字幕取得
-        captions = fetch_captions(video_id)
-        if not captions:
-            raise ValueError("字幕が見つからへんかった😢")
-        
-        logger.info(f"📃 字幕取得成功！文字数: {len(captions)}")
-        
-        # 要約生成
-        summary_service = SummaryService()
-        summary = summary_service.generate_summary(captions, options)
-        
-        logger.info("✅ 要約生成完了!")
-        return {"summary": summary, "video_id": video_id}
-        
-    except CaptionFetchError as e:
-        logger.error(f"🚨 字幕取得エラー: {str(e)}")
-        raise ValueError(f"字幕取得エラー: {str(e)}")
+        # 字幕取得 - エラー種類によって対応を変える
+        try:
+            captions = fetch_captions(video_id)
+            if not captions:
+                logger.error("📭 空の字幕テキスト")
+                raise ValueError("字幕テキストが空だよ💦")
+                
+            logger.info(f"📃 字幕取得成功！文字数: {len(captions)}")
+            
+            # 要約生成
+            summary_service = SummaryService()
+            summary = summary_service.generate_summary(captions, options)
+            
+            logger.info("✅ 要約生成完了!")
+            return {"summary": summary, "video_id": video_id}
+            
+        except NoSubtitlesError as e:
+            # 字幕がない場合の専用エラーメッセージ
+            logger.error(f"🎬 字幕なしエラー: {str(e)}")
+            raise ValueError(f"😢 {str(e)}")
+            
+        except RateLimitError as e:
+            # レート制限エラー 
+            logger.error(f"⏱️ レート制限エラー: {str(e)}")
+            raise ValueError(f"⚠️ {str(e)}")
+            
+        except CaptionFetchError as e:
+            # その他の字幕取得エラー
+            logger.error(f"🚨 字幕取得エラー: {str(e)}")
+            raise ValueError(f"字幕取得エラー: {str(e)}")
+            
     except PerplexityError as e:
-        logger.error(f"🚨 要約生成エラー: {str(e)}")
+        logger.error(f"🧠 要約生成エラー: {str(e)}")
         raise ValueError(f"要約生成エラー: {str(e)}")
+        
     except Exception as e:
-        logger.error(f"🔥 エラー発生: {str(e)}", exc_info=True)
+        logger.error(f"🔥 予期せぬエラー発生: {str(e)}", exc_info=True)
         raise ValueError(f"要約処理に失敗したわ〜💦 エラー: {str(e)}")
 
 def main():
@@ -827,6 +935,9 @@ def main():
                 # ローディング表示
                 with st.spinner("動画を分析中...ちょっと待っててね〜🐢"):
                     try:
+                        # 🆕 実行前にログを出力
+                        logger.info(f"🚀 要約処理開始: URL={url}")
+                        
                         # 直接関数を呼び出し（APIリクエストではない）
                         result = summarize_video(url, options)
                         
@@ -842,8 +953,10 @@ def main():
                         }
                         
                         st.success("要約完了！✨")
+                        logger.info("✅ 全処理完了、結果を表示します")
                     except ValueError as e:
                         st.error(str(e))
+                        logger.error(f"❌ エラーで処理中断: {str(e)}")
                         return
             
             # ==================== 結果表示セクション ====================
