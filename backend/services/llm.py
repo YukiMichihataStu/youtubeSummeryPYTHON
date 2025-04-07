@@ -151,7 +151,7 @@ class SummaryService:
         
         # APIリクエストの作成
         payload = {
-            "model": "sonar-pro",  # 良いモデルを選ぶよ〜💕
+            "model": "sonar",  # 良いモデルを選ぶよ〜💕
             "messages": [
                 {
                     "role": "system",
@@ -276,11 +276,25 @@ class SummaryService:
             try:
                 logger.info(f"🔄 Perplexity API呼び出し試行 {retries + 1}/{MAX_RETRIES}")
                 
+                # 🆕🔥 絵文字と日本語を安全に処理するためのエンコーディング対策
+                # Content-Typeヘッダーを明示的にUTF-8に設定
+                headers = self.headers.copy()
+                headers["Content-Type"] = "application/json; charset=utf-8"
+                
+                # 🆕🔥 特殊文字を含む可能性のあるフィールドをエスケープ処理
+                safe_payload = self._sanitize_payload(payload)
+                
+                logger.debug(f"📤 APIリクエスト準備: ヘッダー設定完了, ペイロードサイズ={len(str(safe_payload))}")
+                
+                # 🆕🔥 requestsでJSON文字列を直接送信する方法（jsonパラメータではなくdataを使用）
+                import json
+                json_data = json.dumps(safe_payload, ensure_ascii=False).encode('utf-8')
+                
                 response = requests.post(
                     self.api_url,
-                    headers=self.headers,
-                    json=payload,
-                    timeout=30
+                    headers=headers,
+                    data=json_data,  # 🆕 jsonではなくdata引数を使用
+                    timeout=60
                 )
                 
                 # レスポンスコードのチェック
@@ -305,6 +319,14 @@ class SummaryService:
                     logger.error(f"🚨 {error_msg}")
                     last_error = PerplexityError(error_msg)
             
+            except UnicodeEncodeError as e:
+                # 🆕🔥 エンコードエラーの詳細情報をログに残す
+                error_context = str(e)
+                error_position = f"位置 {e.start}-{e.end} の文字: '{e.object[e.start:e.end]}'" if hasattr(e, 'start') else "不明"
+                error_msg = f"エンコードエラー: {error_context}, {error_position}"
+                logger.error(f"🚨 {error_msg}")
+                last_error = PerplexityError(error_msg)
+            
             except Exception as e:
                 error_msg = f"API呼び出し例外: {str(e)}"
                 logger.error(f"🚨 {error_msg}")
@@ -317,6 +339,52 @@ class SummaryService:
         
         # 最大リトライ回数に達した場合
         raise last_error or PerplexityError("不明なエラーでAPI呼び出しに失敗したわ〜😭")
+    
+    def _sanitize_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        APIリクエストのペイロードから問題を起こしそうな文字を処理するよ〜🧹
+        
+        引数:
+            payload: 元のAPIリクエストペイロード
+            
+        戻り値:
+            Dict[str, Any]: 安全に処理されたペイロード
+        """
+        import copy
+        
+        # 深いコピーを作成して元データを変更しないようにする
+        safe_payload = copy.deepcopy(payload)
+        
+        # messagesの中身を処理
+        if "messages" in safe_payload:
+            for message in safe_payload["messages"]:
+                if "content" in message:
+                    # 絵文字を含む文字列を安全に処理
+                    message["content"] = self._ensure_safe_text(message["content"])
+        
+        return safe_payload
+    
+    def _ensure_safe_text(self, text: str) -> str:
+        """
+        テキストが安全にAPIで処理できるか確認するよ〜✨
+        問題がある絵文字や特殊文字を置換する
+        
+        引数:
+            text: 処理する文字列
+            
+        戻り値:
+            str: 安全に処理された文字列
+        """
+        # 空白に置換する可能性のある特殊なコントロール文字のリスト
+        control_chars = [chr(i) for i in range(0, 32) if i != 10 and i != 13]
+        
+        # 制御文字を削除
+        for char in control_chars:
+            if char in text:
+                text = text.replace(char, " ")
+        
+        logger.debug(f"🧹 テキストクリーニング完了: 長さ={len(text)}")
+        return text
 
 async def generate_summary(
     caption_text: str, 
