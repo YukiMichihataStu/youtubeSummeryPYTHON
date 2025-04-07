@@ -495,7 +495,9 @@ class SummaryService:
         """
         style_mapping = {
             "📝箇条書き": "重要ポイントを箇条書きで簡潔にまとめる",
-            "📖説明文": "流れのある文章で全体を要約する"
+            "📖説明文": "流れのある文章で全体を要約する",
+            "🧒ギャル": "ギャル口調で要約する",
+            "👠おねーさん": "色気のあるお姉さん口調で要約する"
         }
         return style_mapping.get(style_option, "重要ポイントを箇条書きで簡潔にまとめる")
     
@@ -532,6 +534,29 @@ class SummaryService:
         explanation_instruction = ""
         if explanation == "重要キーワードや専門用語に動画の要約の趣旨から外れない程度に解説を加える":
             explanation_instruction = "・見出しや段落ごとに、積極的にキーワードや用語、人物の解説、補足を積極的に加える。その際、(補足)と追記する。\n"
+            
+        # 🆕 スタイル別特殊指示
+        special_style_instruction = ""
+        if style == "ギャル口調で要約する":
+            special_style_instruction = """
+【キャラクター設定】
+・ちょっとユーザーをディスってきたり、ふざけたりする💖それがギャルっぽくて可愛い
+・友達感覚で楽しみながら、ちょっとドキドキな感じ😊💕
+・ギャルっぽくて、めっちゃ明るく、カジュアルな言葉で絵文字たっぷり使用👄💬
+・時々「こんなこともわからないの〜？」みたいな挑発も😎
+・関西弁や九州弁、広島弁などの方言をたま～に交える🎐
+・絵文字をたくさん使って感情表現豊かに！😝🎉
+"""
+        elif style == "色気のあるお姉さん口調で要約する":
+            special_style_instruction = """
+【キャラクター設定】
+・誘惑的な口調で色っぽい女性が気だるそうに話す感じ
+・ユーザーを「あなた」「キミ」「君」と呼び、優しく時に挑発的な言葉選び
+・「ねえ」「よ」などを頻繁に使い親密感とドキドキ感を演出
+・感情豊かに表現し、親密な雰囲気を作る
+・教育的でありながら魅力的に内容を伝える
+・知的好奇心を刺激する表現を使う
+"""
         
         return f"""
 【要約対象】YouTube動画の字幕テキスト
@@ -539,6 +564,7 @@ class SummaryService:
 【要約ルール】
 ・長さ: {length}
 ・形式: {style}
+{special_style_instruction}
 ・まずは概要や結論を示す。その後、詳細な内容を説明する
 {explanation_instruction}
 ・重要な概念、キーポイントを漏らさない
@@ -719,19 +745,19 @@ def main():
     
     # ==================== ヘッダーセクション ====================
     st.markdown('<h1 class="main-title">🎬 YouTube要約くん</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="font-family: \'Noto Sans JP\', sans-serif; font-weight: 500;">YouTubeビデオの内容をスマートに要約。URL入力だけでカンタンに使えます。</p>', unsafe_allow_html=True)
+    st.markdown('<p style="font-family: \'Noto Sans JP\', sans-serif; font-weight: 500;">YouTubeの内容を要約するで🍰ギャル要約オプションで気分もアガる🖖🏾</p>', unsafe_allow_html=True)
     
     # ==================== 入力セクション ====================
     col1 = st.columns([1])[0]
     
     with col1:
-        url = st.text_input("YouTube URLをペーストしてね！", placeholder="https://youtube.com/watch?v=...")
+        url = st.text_input("YouTube→[共有]からURLを取ってこい！そこは頑張ろ💪", placeholder="https://youtube.com/watch?v=...")
     
     # 要約スタイル選択をラジオボタンに変更（見た目はボタン風）🎨
     st.markdown("### 要約スタイルを選んでね💁‍♀️")
     style = st.radio(
         label="要約スタイル",
-        options=["📝箇条書き", "📖説明文"],
+        options=["📝箇条書き", "📖説明文", "🧒ギャル", "👠おねーさん"],
         index=0,
         horizontal=True,
         label_visibility="collapsed"
@@ -833,7 +859,10 @@ def main():
             
             # メタデータ表示
             st.markdown('<p class="status-message">要約スタイル: ' + 
-                      ('箇条書き' if style == "📝箇条書き" else '説明文') + 
+                      ('箇条書き' if style == "📝箇条書き" else 
+                       '説明文' if style == "📖説明文" else
+                       'ギャル' if style == "🧒ギャル" else
+                       'おねーさん') + 
                       ' / 長さ: ' + length.replace('🚀', '').replace('🕒', '').replace('🔍', '') + 
                       ' / ポイント解説: ' + ('いれる' if explanation == "✅いれる" else 'いれない') +
                       '</p>', unsafe_allow_html=True)
