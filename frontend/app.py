@@ -327,7 +327,7 @@ def extract_video_id(url: str) -> Optional[str]:
     logger.warning(f"⚠️ URLから動画IDを抽出できへんかった: {url}")
     return None
 
-def fetch_captions(video_id: str) -> str:
+def fetch_captions(video_id: str) -> Tuple[str, Dict[str, Any]]:
     """
     YouTube動画から字幕を効率的に取得するよ〜📝
     最適化バージョン：APIコール回数を大幅削減！✨
@@ -336,7 +336,12 @@ def fetch_captions(video_id: str) -> str:
         video_id (str): YouTube動画ID
         
     戻り値:
-        str: 取得した字幕テキスト
+        Tuple[str, Dict[str, Any]]: (字幕テキスト, 字幕情報)
+        字幕情報には以下のキーがあるよ：
+        - selected_lang: 選択された字幕言語
+        - available_languages: 利用可能な言語リスト
+        - manual_languages: 手動字幕の言語リスト
+        - generated_languages: 自動生成字幕の言語リスト
         
     例外:
         NoSubtitlesError: 字幕がない場合
@@ -351,7 +356,7 @@ def fetch_captions(video_id: str) -> str:
             # キャッシュの有効期限をチェック
             if time.time() - cache_data["timestamp"] < CACHE_EXPIRY:
                 logger.info(f"🎉 字幕キャッシュヒット！動画ID: {video_id}")
-                return cache_data["caption_text"]
+                return cache_data["caption_text"], cache_data["subtitle_info"]
             else:
                 logger.info(f"⏰ 字幕キャッシュ期限切れ: {video_id}")
     else:
@@ -362,10 +367,17 @@ def fetch_captions(video_id: str) -> str:
     try:
         logger.info(f"🎬 動画ID: {video_id} の字幕取得開始！")
         
+        # 字幕情報を格納する辞書
+        subtitle_info = {
+            "selected_lang": None,
+            "available_languages": [],
+            "manual_languages": [],
+            "generated_languages": []
+        }
+        
         # 🌟 効率化ポイント：一度のAPIコールで全字幕情報を取得 🌟
         try:
             # API呼び出し回数を減らすため、まず利用可能な字幕リストを1回で取得
-            # この1回のAPIコールで、後続の字幕取得処理の効率が大幅アップ！
             logger.info(f"📋 利用可能な字幕リストを取得中...")
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             available_languages = [t.language for t in transcript_list]
@@ -380,6 +392,11 @@ def fetch_captions(video_id: str) -> str:
             generated_transcripts = [t for t in transcript_list if t.is_generated]
             generated_languages = [t.language for t in generated_transcripts]
             logger.info(f"🤖 自動生成字幕言語: {generated_languages}")
+            
+            # 字幕情報を更新
+            subtitle_info["available_languages"] = available_languages
+            subtitle_info["manual_languages"] = manual_languages
+            subtitle_info["generated_languages"] = generated_languages
             
             # 優先順位で字幕を取得: 日本語手動 > 英語手動 > 日本語自動 > 英語自動 > その他
             transcript = None
@@ -428,6 +445,9 @@ def fetch_captions(video_id: str) -> str:
                 logger.error("😱 字幕が1つも見つからなかった！")
                 raise NoSubtitlesError("この動画には字幕がないみたい…他の動画を試してみてね！😢")
                 
+            # 選択された言語を記録
+            subtitle_info["selected_lang"] = selected_lang
+                
             logger.info(f"✨ 字幕取得成功: {selected_lang}")
                 
         except (TranscriptsDisabled, NoTranscriptFound) as e:
@@ -463,10 +483,11 @@ def fetch_captions(video_id: str) -> str:
                 st.session_state[CAPTION_CACHE_KEY][video_id] = {
                     "caption_text": caption_text,
                     "timestamp": time.time(),
-                    "language": selected_lang
+                    "language": selected_lang,
+                    "subtitle_info": subtitle_info
                 }
                 
-                return caption_text
+                return caption_text, subtitle_info
         else:
             logger.error("😱 字幕処理後に内容が空になった")
             raise NoSubtitlesError("字幕が見つからないか、処理中にエラーが発生したわ〜😢")
@@ -479,7 +500,7 @@ def fetch_captions(video_id: str) -> str:
         logger.error(f"🚨 予期せぬエラー: {error_msg}")
         raise CaptionFetchError(error_msg)
     
-    return ""
+    return "", {}  # エラー時の戻り値
 
 # ====================✨ ここから要約生成の関数だよ ====================
 
@@ -799,7 +820,7 @@ def summarize_video(url: str, options: Dict[str, str]) -> Dict[str, Any]:
         
         # 字幕取得 - エラー種類によって対応を変える
         try:
-            captions = fetch_captions(video_id)
+            captions, subtitle_info = fetch_captions(video_id)
             if not captions:
                 logger.error("📭 空の字幕テキスト")
                 raise ValueError("字幕テキストが空だよ💦")
@@ -811,7 +832,11 @@ def summarize_video(url: str, options: Dict[str, str]) -> Dict[str, Any]:
             summary = summary_service.generate_summary(captions, options)
             
             logger.info("✅ 要約生成完了!")
-            return {"summary": summary, "video_id": video_id}
+            return {
+                "summary": summary, 
+                "video_id": video_id, 
+                "subtitle_info": subtitle_info
+            }
             
         except NoSubtitlesError as e:
             # 字幕がない場合の専用エラーメッセージ
@@ -931,6 +956,7 @@ def main():
                 st.success("キャッシュからの高速表示だよ〜⚡")
                 summary = cached_result["summary"]
                 video_id = cached_result.get("video_id")
+                subtitle_info = cached_result.get("subtitle_info", {})
             else:
                 # ローディング表示
                 with st.spinner("動画を分析中...ちょっと待っててね〜🐢"):
@@ -944,11 +970,13 @@ def main():
                         # 結果の取得
                         summary = result.get("summary", "要約生成に失敗しちゃった...")
                         video_id = result.get("video_id")
+                        subtitle_info = result.get("subtitle_info", {})
                         
                         # キャッシュに保存
                         st.session_state.cache[cache_key] = {
                             "summary": summary,
                             "video_id": video_id,
+                            "subtitle_info": subtitle_info,
                             "timestamp": time.time()
                         }
                         
@@ -966,6 +994,35 @@ def main():
             if embed_url:
                 st.markdown('<h2 class="sub-title">📺 参照動画</h2>', unsafe_allow_html=True)
                 st.components.v1.iframe(embed_url, height=315)
+            
+            # 🆕 字幕情報の表示
+            if subtitle_info:
+                st.markdown('<h2 class="sub-title">🗣️ 字幕情報</h2>', unsafe_allow_html=True)
+                
+                # 使用した字幕言語
+                selected_lang = subtitle_info.get("selected_lang", "不明")
+                st.markdown(f"**使用した字幕:** {selected_lang}")
+                
+                # 利用可能な字幕言語
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    manual_langs = subtitle_info.get("manual_languages", [])
+                    if manual_langs:
+                        st.markdown("**📝 手動字幕:**")
+                        for lang in manual_langs:
+                            st.markdown(f"• {lang}")
+                    else:
+                        st.markdown("**📝 手動字幕:** なし")
+                
+                with col2:
+                    generated_langs = subtitle_info.get("generated_languages", [])
+                    if generated_langs:
+                        st.markdown("**🤖 自動生成字幕:**")
+                        for lang in generated_langs:
+                            st.markdown(f"• {lang}")
+                    else:
+                        st.markdown("**🤖 自動生成字幕:** なし")
             
             # 要約結果表示
             st.markdown('<h2 class="sub-title">📝 要約結果</h2>', unsafe_allow_html=True)
