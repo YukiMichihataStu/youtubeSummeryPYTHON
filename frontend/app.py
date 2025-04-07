@@ -746,7 +746,8 @@ def main():
     # ==================== ヘッダーセクション ====================
     st.markdown('<h1 class="main-title">🎬 YouTube要約くん</h1>', unsafe_allow_html=True)
     st.markdown('<p style="font-family: \'Noto Sans JP\', sans-serif; font-weight: 500;">YouTubeの内容を要約するで🍰ギャル要約オプションで気分もアガる🖖🏾</p>', unsafe_allow_html=True)
-    
+    st.markdown('<p style="font-family: \'Noto Sans JP\', sans-serif; font-weight: 500;">すまん🙇いま要約リクエストが多すぎてダウン中やで。また明日カムバック🙇</p>', unsafe_allow_html=True)
+
     # ==================== 入力セクション ====================
     col1 = st.columns([1])[0]
     
