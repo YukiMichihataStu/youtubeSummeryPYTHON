@@ -919,7 +919,7 @@ def main():
     
     # API設定セクション
     st.sidebar.title("API設定")
-    api_key = st.sidebar.text_input("Perplexity API Key", 
+    api_key = st.sidebar.text_input("Perplexity API Key(いまはワイのAPI_KEYを自腹で払ってるで💸)", 
                                    value=PERPLEXITY_API_KEY,
                                    type="password",
                                    help="Perplexity APIのキーを入力してください。")
@@ -927,6 +927,28 @@ def main():
     if api_key:
         # APIキーを設定
         os.environ["PERPLEXITY_API_KEY"] = api_key
+    
+    # 更新履歴セクション
+    st.sidebar.markdown("---")
+    st.sidebar.title("📅 更新履歴")
+    
+    update_history = """
+    ### 🎉 最新アップデート
+    
+    **2023.12.15**
+    - 🧠 ポイント解説機能追加したで〜！
+    - 🦄 ギャル口調の要約がさらに進化！イェイ✌️
+    
+    **2023.12.01**
+    - 👠 おねーさん口調の要約追加してん！
+    - 🚀 処理速度アップしたでー！
+    
+    **2023.11.15**
+    - 🎬 YouTube要約くん公開スタート！
+    - 📝 箇条書き要約と説明文要約対応
+    """
+    
+    st.sidebar.markdown(update_history)
     
     # 要約スタートボタン
     submit_button = st.button("✨ 要約スタート！", use_container_width=True)
