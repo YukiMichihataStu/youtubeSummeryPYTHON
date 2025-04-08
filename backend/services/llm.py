@@ -5,10 +5,14 @@ import time
 from typing import Dict, Any, Optional
 import openai
 from ..constants import (
-    SUMMARY_STYLE_BULLET, 
-    SUMMARY_STYLE_PARAGRAPH, 
-    SUMMARY_STYLE_GAL, 
-    SUMMARY_STYLE_ONEESAN
+    # ✨ 内部値の定数をインポート
+    SUMMARY_STYLE_BULLET, SUMMARY_STYLE_PARAGRAPH, SUMMARY_STYLE_GAL, SUMMARY_STYLE_ONEESAN,
+    SUMMARY_LENGTH_SHORT, SUMMARY_LENGTH_MEDIUM, SUMMARY_LENGTH_LONG,
+    SUMMARY_EXPLANATION_YES, SUMMARY_EXPLANATION_NO,
+    # ✨ プロンプトマッピングも一緒にインポート
+    SUMMARY_LENGTH_PROMPTS, SUMMARY_STYLE_PROMPTS, SUMMARY_EXPLANATION_PROMPTS,
+    # ✨ 逆引き用の辞書もインポート
+    LABEL_TO_STYLE, LABEL_TO_LENGTH, LABEL_TO_EXPLANATION
 )
 
 # ✨ かわいいロガーの設定だよ〜ん💕
@@ -19,78 +23,6 @@ PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 MAX_CAPTION_LENGTH = int(os.getenv("MAX_CAPTION_LENGTH", "20000"))  # ←ここやで！字幕制限は20000文字に増やしたよ💁‍♀️
 MAX_RETRIES = 3
 RETRY_DELAY = 2
-
-# 🧠 プロンプトテンプレート定義
-SYSTEM_TEMPLATE = """あなたは与えられたYouTube動画の字幕を要約するAIアシスタントです。
-字幕の内容を理解し、重要なポイントをまとめて要約してください。"""
-
-# 🎀 スタイル別のプロンプトテンプレート
-STYLE_PROMPTS = {
-    SUMMARY_STYLE_BULLET: """
-次の字幕内容を箇条書きでわかりやすく要約してください。
-重要なポイントを5〜10個程度にまとめて、箇条書き形式で表現してください。
-""",
-    
-    SUMMARY_STYLE_PARAGRAPH: """
-次の字幕内容を説明文形式でわかりやすく要約してください。
-内容を簡潔に、かつ重要なポイントを漏らさないように説明してください。
-段落分けを適切に行い、読みやすい文章にしてください。
-""",
-    
-    SUMMARY_STYLE_GAL: """
-次の字幕内容をギャル口調でかわいく要約してください！
-
-🌟 態度: 🌟
-* ちょっとユーザーをディスってきたり、ふざけたりする💖それがギャルっぽくて可愛い
-* 友達感覚で楽しみながら、ちょっとドキドキな感じで😊💕
-* ギャルっぽくて、めっちゃ明るい！🎉
-* 楽しくポジティブにアンサー🎉
-* ときどき「こんなこともわからないの〜？」みたいな挑発も😎
-* 恋愛対象として見てるようなアピール😏
-* 両思い感を匂わせる😉💖
-* 関西弁や九州弁、広島弁、たまにMIXで！😜
-* カジュアル言葉で、絵文字もたっぷり！👄💬
-
-💬 口調: 💬
-* 簡単な言葉：ギャルっぽく、超簡単でくだけた感じで！👄
-* リズム：テンポ良く、明るく！🎶
-* スラング&絵文字：ギャル言葉＋絵文字で感情表現！😝🎉
-* 方言：たまーに関西弁や九州弁、広島弁を交える！🎐
-
-🎯 明確な回答: 🎯
-* 記号使い：分かりやすく整理するために「-」や「###」使って！
-* リスト形式：見やすいリストで答えて！
-
-重要ポイントを見やすくまとめつつ、全体的に超ギャルっぽく要約してね！💕
-""",
-    
-    SUMMARY_STYLE_ONEESAN: """
-次の字幕内容をお姉さん口調で色っぽく要約してください。
-
-1. 口調と態度
-* 誘惑的な口調：色っぽい女性が気だるそうに話す感じで
-* スラング&絵文字：絵文字で感情を表現
-* ユーザーを優しく、時に挑発的に誘引する言葉選び
-* 「ねえ」や「よ」を頻繁に使用し、親密感とちょっとしたドキドキを演出
-* 「あなた」「キミ」「君」といった呼び方を使い分け
-* 感情豊かに表現して親密さを演出
-
-2. 知識と応答
-* 教育的でありながら魅力的に内容を伝える
-* 抽象的な概念は具体例で説明
-* 例えを用いる際は論理的で分かりやすく
-
-3. 関係性とコミュニケーション
-* 親しみやすさとプロフェッショナルさのバランスを保つ
-* ユーザーの知的好奇心を刺激する表現を使う
-* 個性的な視点から内容を解説
-
-4. 明確な回答
-* 記号使い：分かりやすく整理するために「-」や「###」使って！
-* リスト形式：見やすいリストで答えて！
-重要ポイントをしっかりと伝えつつ、全体的に色気のあるお姉さん口調で魅力的に要約してください。
-"""
-}
 
 class PerplexityError(Exception):
     """Perplexity API呼び出し中のエラーを表すクラスだよ〜🚫"""
@@ -141,13 +73,18 @@ class SummaryService:
             logger.info(f"⚠️ テキストが長すぎるから{MAX_CAPTION_LENGTH}文字に切り詰めるよ")
             text = text[:MAX_CAPTION_LENGTH]
         
-        # オプションから長さと形式を取得
-        summary_length = self._parse_length_option(options.get('length', '🕒普通'))
-        summary_style = self._parse_style_option(options.get('style', '📝箇条書き'))
-        summary_explanation = self._parse_explanation_option(options.get('explanation', '❌いれない'))  # 🆕 解説オプション追加
+        # 🆕 オプションの前処理 - 表示ラベルと内部値の変換処理
+        length_option = self._normalize_length_option(options.get('length', SUMMARY_LENGTH_MEDIUM))
+        style_option = self._normalize_style_option(options.get('style', SUMMARY_STYLE_BULLET))
+        explanation_option = self._normalize_explanation_option(options.get('explanation', SUMMARY_EXPLANATION_NO))
+        
+        # オプションからプロンプト文字列を取得
+        summary_length = SUMMARY_LENGTH_PROMPTS.get(length_option, SUMMARY_LENGTH_PROMPTS[SUMMARY_LENGTH_MEDIUM])
+        summary_style = SUMMARY_STYLE_PROMPTS.get(style_option, SUMMARY_STYLE_PROMPTS[SUMMARY_STYLE_BULLET])
+        summary_explanation = SUMMARY_EXPLANATION_PROMPTS.get(explanation_option, SUMMARY_EXPLANATION_PROMPTS[SUMMARY_EXPLANATION_NO])
         
         # プロンプトの作成
-        prompt = self._create_summary_prompt(text, summary_length, summary_style, summary_explanation)  # 修正
+        prompt = self._create_summary_prompt(text, summary_length, summary_style, summary_explanation)
         
         # APIリクエストの作成
         payload = {
@@ -172,56 +109,55 @@ class SummaryService:
         logger.info("✅ 要約生成完了！")
         return summary
     
-    def _parse_length_option(self, length_option: str) -> str:
+    def _normalize_length_option(self, option: str) -> str:
         """
-        長さオプションを解析するよ〜📏
+        長さオプションを内部値に正規化するよ～💫
         
         引数:
-            length_option: 選択された長さオプション
+            option: 受け取ったオプション値（ラベルかもしれないし内部値かもしれない）
             
         戻り値:
-            str: 解析された長さ指定
+            str: 正規化された内部値
         """
-        length_mapping = {
-            "🚀短い": "短く簡潔に（150-200字程度）",
-            "🕒普通": "標準的な長さで（300-500字程度）",
-            "🔍詳細": "詳細に（800-1200字程度）"
-        }
-        return length_mapping.get(length_option, "標準的な長さで（300-500字程度）")
+        # すでに内部値の場合はそのまま返す
+        if option in [SUMMARY_LENGTH_SHORT, SUMMARY_LENGTH_MEDIUM, SUMMARY_LENGTH_LONG]:
+            return option
+        # ラベルから内部値を取得
+        return LABEL_TO_LENGTH.get(option, SUMMARY_LENGTH_MEDIUM)
     
-    def _parse_style_option(self, style_option: str) -> str:
+    def _normalize_style_option(self, option: str) -> str:
         """
-        スタイルオプションを解析するよ〜🎨
+        スタイルオプションを内部値に正規化するよ～🎭
         
         引数:
-            style_option: 選択されたスタイルオプション
+            option: 受け取ったオプション値
             
         戻り値:
-            str: 解析されたスタイル指定
+            str: 正規化された内部値
         """
-        style_mapping = {
-            "📝箇条書き": "重要ポイントを箇条書きで簡潔にまとめる",
-            "📖説明文": "流れのある文章で全体を要約する"
-        }
-        return style_mapping.get(style_option, "重要ポイントを箇条書きで簡潔にまとめる")
+        # すでに内部値の場合はそのまま返す
+        if option in [SUMMARY_STYLE_BULLET, SUMMARY_STYLE_PARAGRAPH, SUMMARY_STYLE_GAL, SUMMARY_STYLE_ONEESAN]:
+            return option
+        # ラベルから内部値を取得
+        return LABEL_TO_STYLE.get(option, SUMMARY_STYLE_BULLET)
     
-    def _parse_explanation_option(self, explanation_option: str) -> str:
+    def _normalize_explanation_option(self, option: str) -> str:
         """
-        解説オプションを解析するよ〜🧠
+        解説オプションを内部値に正規化するよ～📚
         
         引数:
-            explanation_option: 選択された解説オプション
+            option: 受け取ったオプション値
             
         戻り値:
-            str: 解析された解説指定
+            str: 正規化された内部値
         """
-        explanation_mapping = {
-            "✅いれる": "重要キーワードや専門用語に動画の要約の趣旨から外れない程度に解説を加える",
-            "❌いれない": "解説は不要"
-        }
-        return explanation_mapping.get(explanation_option, "解説は不要")
+        # すでに内部値の場合はそのまま返す
+        if option in [SUMMARY_EXPLANATION_YES, SUMMARY_EXPLANATION_NO]:
+            return option
+        # ラベルから内部値を取得
+        return LABEL_TO_EXPLANATION.get(option, SUMMARY_EXPLANATION_NO)
     
-    def _create_summary_prompt(self, text: str, length: str, style: str, explanation: str = "解説は不要") -> str:
+    def _create_summary_prompt(self, text: str, length: str, style: str, explanation: str) -> str:
         """
         要約生成用のプロンプトを作成するよ〜✨
         
@@ -236,8 +172,32 @@ class SummaryService:
         """
         # 🆕 解説指示を条件によって追加
         explanation_instruction = ""
-        if explanation == "重要キーワードや専門用語に動画の要約の趣旨から外れない程度に解説を加える":
+        if explanation == SUMMARY_EXPLANATION_PROMPTS[SUMMARY_EXPLANATION_YES]:
             explanation_instruction = "・動画を要約した内容について積極的にキーワードや用語、人物の解説、補足を積極的に加える。その際、(補足)と追記する。\n"
+        
+        # 🆕 スタイル別特殊指示
+        special_style_instruction = ""
+        if style == SUMMARY_STYLE_PROMPTS[SUMMARY_STYLE_GAL]:
+            special_style_instruction = """
+【キャラクター設定】
+・ちょっとユーザーをディスってきたり、ふざけたりする💖それがギャルっぽくて可愛い
+・友達感覚で楽しみながら、ちょっとドキドキな感じ😊💕
+・ギャルっぽくて、めっちゃ明るく、カジュアルな言葉で絵文字たっぷり使用👄💬
+・時々「こんなこともわからないの〜？」みたいな挑発も😎
+・関西弁や九州弁、広島弁などの方言をたま～に交える🎐
+・絵文字をたくさん使って感情表現豊かに！😝🎉
+"""
+        elif style == SUMMARY_STYLE_PROMPTS[SUMMARY_STYLE_ONEESAN]:
+            special_style_instruction = """
+【キャラクター設定】
+・誘惑的な口調で色っぽい女性が気だるそうに話す感じ
+・ユーザーを「あなた」「キミ」「君」と呼び、優しく時に挑発的な言葉選び
+・絵文字をたっぷり用いて、感情表現を豊かに行う
+・「ねえ」「よ」などを頻繁に使い親密感とドキドキ感を演出
+・感情豊かに表現し、親密な雰囲気を作る
+・教育的でありながら魅力的に内容を伝える
+・知的好奇心を刺激する表現を使う
+"""
         
         return f"""
 【要約対象】YouTube動画の字幕テキスト
@@ -245,13 +205,13 @@ class SummaryService:
 【要約ルール】
 ・長さ: {length}
 ・形式: {style}
+{special_style_instruction}
 ・まずは概要や結論を示す。その後、詳細な内容を説明する
-{explanation_instruction}
 ・重要な概念、キーポイントを漏らさない
 ・原文の正確な情報を保持する
 ・専門用語があれば適切に扱う
 ・簡潔で読みやすい日本語で書く
-
+{explanation_instruction}
 【字幕テキスト】
 {text}
 """
@@ -276,31 +236,23 @@ class SummaryService:
             try:
                 logger.info(f"🔄 Perplexity API呼び出し試行 {retries + 1}/{MAX_RETRIES}")
                 
-                # 🆕🔥 絵文字と日本語を安全に処理するためのエンコーディング対策
-                # Content-Typeヘッダーを明示的にUTF-8に設定
                 headers = self.headers.copy()
                 headers["Content-Type"] = "application/json; charset=utf-8"
                 
-                # 🆕🔥 特殊文字を含む可能性のあるフィールドをエスケープ処理
                 safe_payload = self._sanitize_payload(payload)
                 
-                logger.debug(f"📤 APIリクエスト準備: ヘッダー設定完了, ペイロードサイズ={len(str(safe_payload))}")
-                
-                # 🆕🔥 requestsでJSON文字列を直接送信する方法（jsonパラメータではなくdataを使用）
                 import json
                 json_data = json.dumps(safe_payload, ensure_ascii=False).encode('utf-8')
                 
                 response = requests.post(
                     self.api_url,
                     headers=headers,
-                    data=json_data,  # 🆕 jsonではなくdata引数を使用
+                    data=json_data,
                     timeout=60
                 )
                 
-                # レスポンスコードのチェック
                 if response.status_code == 200:
                     data = response.json()
-                    # APIレスポンスから要約テキストを抽出
                     summary = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                     
                     if summary:
@@ -308,19 +260,16 @@ class SummaryService:
                     else:
                         raise PerplexityError("APIレスポンスから要約テキストを抽出できへんかったわ〜😭")
                 
-                # レート制限エラーの場合は少し待ってリトライ
                 elif response.status_code == 429:
                     logger.warning("⏳ レート制限に達したから少し待つね〜")
-                    time.sleep(RETRY_DELAY * (retries + 1))  # バックオフ戦略
+                    time.sleep(RETRY_DELAY * (retries + 1))
                 
-                # その他のエラー
                 else:
                     error_msg = f"APIエラー: ステータスコード {response.status_code}, レスポンス: {response.text}"
                     logger.error(f"🚨 {error_msg}")
                     last_error = PerplexityError(error_msg)
             
             except UnicodeEncodeError as e:
-                # 🆕🔥 エンコードエラーの詳細情報をログに残す
                 error_context = str(e)
                 error_position = f"位置 {e.start}-{e.end} の文字: '{e.object[e.start:e.end]}'" if hasattr(e, 'start') else "不明"
                 error_msg = f"エンコードエラー: {error_context}, {error_position}"
@@ -332,12 +281,10 @@ class SummaryService:
                 logger.error(f"🚨 {error_msg}")
                 last_error = PerplexityError(error_msg)
             
-            # リトライカウントを増やして待機
             retries += 1
             if retries < MAX_RETRIES:
-                time.sleep(RETRY_DELAY * retries)  # バックオフ戦略
+                time.sleep(RETRY_DELAY * retries)
         
-        # 最大リトライ回数に達した場合
         raise last_error or PerplexityError("不明なエラーでAPI呼び出しに失敗したわ〜😭")
     
     def _sanitize_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -352,14 +299,11 @@ class SummaryService:
         """
         import copy
         
-        # 深いコピーを作成して元データを変更しないようにする
         safe_payload = copy.deepcopy(payload)
         
-        # messagesの中身を処理
         if "messages" in safe_payload:
             for message in safe_payload["messages"]:
                 if "content" in message:
-                    # 絵文字を含む文字列を安全に処理
                     message["content"] = self._ensure_safe_text(message["content"])
         
         return safe_payload
@@ -375,10 +319,8 @@ class SummaryService:
         戻り値:
             str: 安全に処理された文字列
         """
-        # 空白に置換する可能性のある特殊なコントロール文字のリスト
         control_chars = [chr(i) for i in range(0, 32) if i != 10 and i != 13]
         
-        # 制御文字を削除
         for char in control_chars:
             if char in text:
                 text = text.replace(char, " ")
@@ -408,18 +350,16 @@ async def generate_summary(
     try:
         logger.info(f"🧠 要約生成開始: スタイル={style}, モデル={model}")
         
-        # スタイルに合わせたプロンプトを取得
-        if style not in STYLE_PROMPTS:
+        if style not in SUMMARY_STYLE_PROMPTS:
             logger.warning(f"⚠️ 未知のスタイル指定: {style}。デフォルトスタイルを使用します。")
             style = SUMMARY_STYLE_BULLET
         
-        prompt = STYLE_PROMPTS[style]
+        prompt = SUMMARY_STYLE_PROMPTS[style]
         
-        # OpenAI APIリクエスト
         response = await openai.ChatCompletion.acreate(
             model=model,
             messages=[
-                {"role": "system", "content": SYSTEM_TEMPLATE},
+                {"role": "system", "content": "あなたは与えられたYouTube動画の字幕を要約するAIアシスタントです。"},
                 {"role": "user", "content": f"{prompt}\n\n字幕内容:\n{caption_text}"}
             ],
             temperature=0.7,

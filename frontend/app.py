@@ -9,6 +9,24 @@ from datetime import datetime
 import dotenv
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 import json
+import sys
+import os
+
+# フロントエンドがバックエンドのパスにアクセスできるようにする
+backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if backend_path not in sys.path:
+    sys.path.append(backend_path)
+
+# 🆕 インポート文を修正 - 必要な定数をすべて明示的に列挙して確実にインポート
+from backend.constants import (
+    SUMMARY_STYLES, SUMMARY_LENGTHS, SUMMARY_EXPLANATIONS,
+    SUMMARY_STYLE_BULLET, SUMMARY_LENGTH_MEDIUM, SUMMARY_EXPLANATION_YES,
+    SUMMARY_LENGTH_SHORT, SUMMARY_LENGTH_LONG,  # 👈 これらが不足していた！
+    SUMMARY_EXPLANATION_NO,  # 👈 これも追加
+    SUMMARY_STYLE_PARAGRAPH, SUMMARY_STYLE_GAL, SUMMARY_STYLE_ONEESAN,  # 👈 他のスタイルも明示的に
+    SUMMARY_LENGTH_PROMPTS, SUMMARY_STYLE_PROMPTS, SUMMARY_EXPLANATION_PROMPTS,
+    LABEL_TO_STYLE, LABEL_TO_LENGTH, LABEL_TO_EXPLANATION
+)
 
 # 💖 .envファイルの読み込み（あれば）
 dotenv.load_dotenv()
@@ -549,10 +567,24 @@ class SummaryService:
             logger.info(f"⚠️ テキストが長すぎるから{MAX_CAPTION_LENGTH}文字に切り詰めるよ")
             text = text[:MAX_CAPTION_LENGTH]
         
-        # オプションから長さと形式を取得
-        summary_length = self._parse_length_option(options.get('length', '🕒普通'))
-        summary_style = self._parse_style_option(options.get('style', '📝箇条書き'))
-        summary_explanation = self._parse_explanation_option(options.get('explanation', '❌いれない'))
+        # 🆕 オプションの値をログに出力（デバッグ用）
+        logger.info(f"🔍 受け取ったオプション: length={options.get('length')}, style={options.get('style')}, explanation={options.get('explanation')}")
+        
+        # 🆕 オプションの正規化処理
+        length_option = self._normalize_length_option(options.get('length', SUMMARY_LENGTH_MEDIUM))
+        style_option = self._normalize_style_option(options.get('style', SUMMARY_STYLE_BULLET))
+        explanation_option = self._normalize_explanation_option(options.get('explanation', SUMMARY_EXPLANATION_YES))
+        
+        # 🆕 正規化した値をログに出力
+        logger.info(f"✅ 正規化後のオプション: length={length_option}, style={style_option}, explanation={explanation_option}")
+        
+        # 🆕 オプションからプロンプト文字列を取得
+        summary_length = SUMMARY_LENGTH_PROMPTS.get(length_option, SUMMARY_LENGTH_PROMPTS[SUMMARY_LENGTH_MEDIUM])
+        summary_style = SUMMARY_STYLE_PROMPTS.get(style_option, SUMMARY_STYLE_PROMPTS[SUMMARY_STYLE_BULLET]) 
+        summary_explanation = SUMMARY_EXPLANATION_PROMPTS.get(explanation_option, SUMMARY_EXPLANATION_PROMPTS[SUMMARY_EXPLANATION_YES])
+        
+        # 🆕 取得したプロンプト文字列をログに出力
+        logger.info(f"📝 生成するプロンプト: length={summary_length}, style={summary_style}, explanation={summary_explanation}")
         
         # プロンプトの作成
         prompt = self._create_summary_prompt(text, summary_length, summary_style, summary_explanation)
@@ -580,56 +612,53 @@ class SummaryService:
         logger.info("✅ 要約生成完了！")
         return summary
     
-    def _parse_length_option(self, length_option: str) -> str:
+    def _normalize_length_option(self, option: str) -> str:
         """
-        長さオプションを解析するよ〜📏
+        長さオプションを内部値に正規化するよ～💫
         
         引数:
-            length_option: 選択された長さオプション
+            option: 受け取ったオプション値（ラベルかもしれないし内部値かもしれない）
             
         戻り値:
-            str: 解析された長さ指定
+            str: 正規化された内部値
         """
-        length_mapping = {
-            "🚀短い": "短く簡潔に（150-200字程度）",
-            "🕒普通": "標準的な長さで（300-500字程度）",
-            "🔍詳細": "詳細に（800-1200字程度）"
-        }
-        return length_mapping.get(length_option, "標準的な長さで（300-500字程度）")
+        # すでに内部値の場合はそのまま返す
+        if option in [SUMMARY_LENGTH_SHORT, SUMMARY_LENGTH_MEDIUM, SUMMARY_LENGTH_LONG]:
+            return option
+        # ラベルから内部値を取得
+        return LABEL_TO_LENGTH.get(option, SUMMARY_LENGTH_MEDIUM)
     
-    def _parse_style_option(self, style_option: str) -> str:
+    def _normalize_style_option(self, option: str) -> str:
         """
-        スタイルオプションを解析するよ〜🎨
+        スタイルオプションを内部値に正規化するよ～🎭
         
         引数:
-            style_option: 選択されたスタイルオプション
+            option: 受け取ったオプション値
             
         戻り値:
-            str: 解析されたスタイル指定
+            str: 正規化された内部値
         """
-        style_mapping = {
-            "📝箇条書き": "重要ポイントを箇条書きで簡潔にまとめる",
-            "📖説明文": "流れのある文章で全体を要約する",
-            "🧒ギャル": "ギャル口調で要約する",
-            "👠おねーさん": "色気のあるお姉さん口調で要約する"
-        }
-        return style_mapping.get(style_option, "重要ポイントを箇条書きで簡潔にまとめる")
+        # すでに内部値の場合はそのまま返す
+        if option in [SUMMARY_STYLE_BULLET, SUMMARY_STYLE_PARAGRAPH, SUMMARY_STYLE_GAL, SUMMARY_STYLE_ONEESAN]:
+            return option
+        # ラベルから内部値を取得
+        return LABEL_TO_STYLE.get(option, SUMMARY_STYLE_BULLET)
     
-    def _parse_explanation_option(self, explanation_option: str) -> str:
+    def _normalize_explanation_option(self, option: str) -> str:
         """
-        解説オプションを解析するよ〜🧠
+        解説オプションを内部値に正規化するよ～📚
         
         引数:
-            explanation_option: 選択された解説オプション
+            option: 受け取ったオプション値
             
         戻り値:
-            str: 解析された解説指定
+            str: 正規化された内部値
         """
-        explanation_mapping = {
-            "✅いれる": "重要キーワードや専門用語に動画の要約の趣旨から外れない程度に解説を加える",
-            "❌いれない": "解説は不要"
-        }
-        return explanation_mapping.get(explanation_option, "解説は不要")
+        # すでに内部値の場合はそのまま返す
+        if option in [SUMMARY_EXPLANATION_YES, SUMMARY_EXPLANATION_NO]:
+            return option
+        # ラベルから内部値を取得
+        return LABEL_TO_EXPLANATION.get(option, SUMMARY_EXPLANATION_NO)
     
     def _create_summary_prompt(self, text: str, length: str, style: str, explanation: str = "解説は不要") -> str:
         """
@@ -644,14 +673,14 @@ class SummaryService:
         戻り値:
             str: 生成されたプロンプト
         """
-        # 🆕 解説指示を条件によって追加
+        # 🆕 解説指示を条件によって追加（バックエンドと同期させる）
         explanation_instruction = ""
-        if explanation == "重要キーワードや専門用語に動画の要約の趣旨から外れない程度に解説を加える":
+        if explanation == SUMMARY_EXPLANATION_PROMPTS[SUMMARY_EXPLANATION_YES]:
             explanation_instruction = "・見出しや段落ごとに、積極的にキーワードや用語、人物の解説、補足を積極的に加える。その際、(補足)と追記する。\n"
             
         # 🆕 スタイル別特殊指示
         special_style_instruction = ""
-        if style == "ギャル口調で要約する":
+        if style == SUMMARY_STYLE_PROMPTS[SUMMARY_STYLE_GAL]:
             special_style_instruction = """
 【キャラクター設定】
 ・ちょっとユーザーをディスってきたり、ふざけたりする💖それがギャルっぽくて可愛い
@@ -661,7 +690,7 @@ class SummaryService:
 ・関西弁や九州弁、広島弁などの方言をたま～に交える🎐
 ・絵文字をたくさん使って感情表現豊かに！😝🎉
 """
-        elif style == "色気のあるお姉さん口調で要約する":
+        elif style == SUMMARY_STYLE_PROMPTS[SUMMARY_STYLE_ONEESAN]:
             special_style_instruction = """
 【キャラクター設定】
 ・誘惑的な口調で色っぽい女性が気だるそうに話す感じ
@@ -689,7 +718,7 @@ class SummaryService:
 【字幕テキスト】
 {text}
 """
-    
+
     def _call_api_with_retry(self, payload: Dict[str, Any]) -> str:
         """
         リトライロジック付きでAPIを呼び出すよ〜🔄
@@ -861,6 +890,22 @@ def summarize_video(url: str, options: Dict[str, str]) -> Dict[str, Any]:
         logger.error(f"🔥 予期せぬエラー発生: {str(e)}", exc_info=True)
         raise ValueError(f"要約処理に失敗したわ〜💦 エラー: {str(e)}")
 
+def get_display_label(options, key, value, default=""):
+    """
+    表示用のラベルを安全に取得する関数だよ～🎯
+    
+    引数:
+        options: オプションのリスト
+        key: 取り出すキー
+        value: 検索する値
+        default: デフォルト値
+    """
+    try:
+        return next((option["label"].split(' ', 1)[-1] for option in options if option["value"] == value), default)
+    except Exception as e:
+        logger.error(f"ラベル取得エラー: {e}")
+        return default
+
 def main():
     """メインアプリケーション処理だよ〜✨"""
     
@@ -891,8 +936,9 @@ def main():
     st.markdown("### 要約スタイルを選んでね💁‍♀️")
     style = st.radio(
         label="要約スタイル",
-        options=["📝箇条書き", "📖説明文", "🧒ギャル", "👠おねーさん"],
-        index=0,
+        options=[option["value"] for option in SUMMARY_STYLES],  # 値のリスト
+        index=0,  # デフォルトは箇条書き
+        format_func=lambda x: next((option["label"] for option in SUMMARY_STYLES if option["value"] == x), x),  # 表示ラベルに変換
         horizontal=True,
         label_visibility="collapsed"
     )
@@ -901,8 +947,9 @@ def main():
     st.markdown("### 要約の長さはどうする？🤔")
     length = st.radio(
         label="要約の長さ",
-        options=["🚀短い", "🕒普通", "🔍詳細"],
-        index=1,
+        options=[option["value"] for option in SUMMARY_LENGTHS],  # 値のリスト
+        index=1,  # デフォルトは普通
+        format_func=lambda x: next((option["label"] for option in SUMMARY_LENGTHS if option["value"] == x), x),  # 表示ラベルに変換
         horizontal=True,
         label_visibility="collapsed"
     )
@@ -911,8 +958,9 @@ def main():
     st.markdown("### ポイント解説いれる？🧐")
     explanation = st.radio(
         label="ポイント解説",
-        options=["✅いれる", "❌いれない"],
-        index=0,  # デフォルトは「いれない」
+        options=[option["value"] for option in SUMMARY_EXPLANATIONS],  # 値のリスト
+        index=0,  # デフォルトは「いれる」
+        format_func=lambda x: next((option["label"] for option in SUMMARY_EXPLANATIONS if option["value"] == x), x),  # 表示ラベルに変換
         horizontal=True,
         label_visibility="collapsed"
     )
@@ -934,6 +982,10 @@ def main():
     
     update_history = """
     ### 🎉 最新アップデート
+    
+    **2025.04.08**
+    - ⚒️ [ポイント解説]いれる？のオプションの不具合修正
+
     
     **2025.04.07**
     - 👠 おねーさんとギャルが参戦！
@@ -961,9 +1013,9 @@ def main():
         else:
             # オプション設定
             options = {
-                "length": length,
-                "style": style,
-                "explanation": explanation
+                "length": length,  # 直接内部値を渡す
+                "style": style,    # 直接内部値を渡す
+                "explanation": explanation  # 直接内部値を渡す
             }
             
             # キャッシュキー生成
@@ -1049,12 +1101,9 @@ def main():
             
             # メタデータ表示
             st.markdown('<p class="status-message">要約スタイル: ' + 
-                      ('箇条書き' if style == "📝箇条書き" else 
-                       '説明文' if style == "📖説明文" else
-                       'ギャル' if style == "🧒ギャル" else
-                       'おねーさん') + 
-                      ' / 長さ: ' + length.replace('🚀', '').replace('🕒', '').replace('🔍', '') + 
-                      ' / ポイント解説: ' + ('いれる' if explanation == "✅いれる" else 'いれない') +
+                      get_display_label(SUMMARY_STYLES, "label", style, "箇条書き") +
+                      ' / 長さ: ' + get_display_label(SUMMARY_LENGTHS, "label", length, "普通") +
+                      ' / ポイント解説: ' + get_display_label(SUMMARY_EXPLANATIONS, "label", explanation, "いれない") +
                       '</p>', unsafe_allow_html=True)
     
     # ==================== フッターセクション ====================
