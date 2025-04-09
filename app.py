@@ -3,9 +3,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import openai
 import os
-
-# エラーハンドラーをインポート
-from utils.error_handler import identify_youtube_error, display_error_message
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.errors import NoTranscriptFound, TranscriptsDisabled, VideoUnavailable
 
 # YouTube APIキーの設定
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
@@ -62,43 +61,110 @@ def summarize_text(text):
     return summary
 
 def main():
-    st.title("YouTube動画要約ツール")
-
-    # 💁‍♀️ 目立つ警告メッセージを追加（めっちゃ目立つ位置！）
-    st.warning("""
-    ## ⚠️ 注意事項やで〜！⚠️
-
-    **デプロイ環境では YouTube API のレート制限にぶち当たる可能性大やねん！** 😱
-
-    レート制限にかかると要約できへんくなるから、もしエラー出たらちょっと時間空けて試してみてな〜！⏰
-
-    あんまりしつこく連打すると余計にダメになるから、グッと我慢よ〜！😘💕
-    """)
-
-    video_url = st.text_input("YouTube動画のURLを入力してください:")
-    if st.button("要約を生成"):
-        if video_url:
-            video_id = video_url.split("v=")[-1]
-            transcript = get_video_transcript(video_id)
-            if transcript:
-                summary = summarize_text(transcript)
-                st.subheader("要約")
-                st.write(summary)
-            else:
-                st.error("動画の字幕を取得できませんでした。")
+    st.title("YouTube動画要約アプリ 🎥✨")
+    
+    # 警告メッセージを目立つように表示
+    st.warning("⚠️ **注意**: デプロイ環境ではYouTube Transcript APIのレート制限にかかる可能性があるで！😱 \n\n"
+               "エラーが出たら少し時間をおいてから再度試してみてな！💖 \n\n"
+               "ローカル環境での実行がおすすめやで〜👍")
+    
+    youtube_url = st.text_input("YouTube動画のURLを入力してね 👇", key="youtube_url")
+    
+    if st.button("要約スタート！🚀"):
+        if youtube_url:
+            with st.spinner("要約中やで...ちょっと待ってな！🔍"):
+                try:
+                    # YouTubeのビデオIDを取得
+                    video_id = extract_video_id(youtube_url)
+                    if not video_id:
+                        st.error("😓 有効なYouTube URLじゃないみたい...もう一度確認してな！")
+                        return
+                    
+                    # 字幕を取得
+                    try:
+                        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ja', 'en'])
+                    except NoTranscriptFound:
+                        st.error("😢 この動画には字幕がないみたい…他の動画を試してみてね！💔")
+                        return
+                    except TranscriptsDisabled:
+                        st.error("🔒 この動画は字幕が無効になっとるわ！別の動画を試してみてな！")
+                        return
+                    except VideoUnavailable:
+                        st.error("⛔ この動画は見れへんわ...削除されたか非公開になってるかも！")
+                        return
+                    except Exception as e:
+                        st.error(f"😭 API制限にかかったかも！少し時間おいてから試してみて！\nエラー詳細: {str(e)}")
+                        return
+                    
+                    # ...existing code...
+                    
+                except Exception as e:
+                    st.error(f"要約処理に失敗したわ〜💦 エラー: {str(e)}")
         else:
-            st.error("有効なYouTube動画のURLを入力してください。")
+            st.warning("URLを入力してからボタン押してな〜！🙏")
 
     try:
         # 要約処理の実行部分
         pass
     except Exception as e:
-        # エラータイプを特定して適切なメッセージを表示
-        error_type = identify_youtube_error(str(e))
-        display_error_message(error_type, str(e))
+        error_message = str(e).lower()
         
-        # コンソールにもエラー内容を出力
-        print(f"Error: {str(e)}")
+        # 💁‍♀️ エラーメッセージを詳細に場合分け
+        if "quota" in error_message or "rate" in error_message or "limit" in error_message:
+            # レート制限エラーの場合
+            st.error("""
+            ## 🚫 API制限に引っかかったみたい〜！😭
+
+            **YouTube API のレート制限に達しちゃったわ！** これよくあるやつ〜！
+
+            ### 💡 対処法：
+            - しばらく待って（30分〜1時間くらい）からもう一回試してみて！⏰
+            - 同じURLで連続して試さないでね！🙅‍♀️
+            - 今日はもう無理かも...明日また来てね〜💕
+
+            技術的に言うと：YouTube Data API の1日の割り当て量を使い切っちゃったのよ〜！
+            """)
+            # デバッグ用にログ出力
+            print(f"Rate limit error occurred: {error_message}")
+            
+        elif "subtitle" in error_message or "captions" in error_message:
+            # 字幕が存在しない場合
+            st.error("要約処理に失敗したわ〜💦 エラー: 😢 この動画には字幕がないみたい…他の動画を試してみてね！😢")
+            # デバッグ用にログ出力
+            print(f"No subtitles error: {error_message}")
+            
+        elif "network" in error_message or "connect" in error_message:
+            # ネットワークエラーの場合
+            st.error("""
+            ## 📶 ネットワークエラー発生！😵
+
+            YouTubeサーバーに接続できへんかったみたい...
+
+            ### 💪 試してみて：
+            - ちょっと待ってからリロードしてみて！🔄
+            - インターネット接続を確認してみて〜📱
+            
+            YouTubeさんのサーバーが忙しいのかも...💭
+            """)
+            # デバッグ用にログ出力
+            print(f"Network error: {error_message}")
+            
+        else:
+            # その他のエラー
+            st.error(f"""
+            ## 😱 なんかエラー出ちゃった！
+
+            予期せぬエラーが発生したっぽい...ごめんね〜！💦
+
+            ### 🔍 原因かも？：
+            - URLが間違ってるかも？🔗
+            - 非公開動画かも？🔒
+            - 別の動画で試してみて！🎬
+
+            エラー詳細：{str(e)}
+            """)
+            # デバッグ用にログ出力
+            print(f"Unknown error: {error_message}")
 
 if __name__ == "__main__":
     main()
