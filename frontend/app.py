@@ -105,7 +105,7 @@ st.markdown("""
     
     /* 英数字を含む可能性が高い要素には両方のフォントを指定（Inconsolataが優先的に使われる） */
     .status-message, .stMetricValue, pre, code, [data-testid="stMetricValue"] {
-        font-family: 'Inconsolata', 'Noto Sans JP', sans-serif !important;
+        font-family: 'Inconsolata', 'Noto Sans JP', sans-serif !重要;
     }
     
     /* ✨ 新しい色彩設定 ✨ */
@@ -208,7 +208,7 @@ st.markdown("""
         color: var(--text-light);
         font-size: 0.8em;
         font-family: 'Inconsolata', 'Noto Sans JP', sans-serif !important;
-        font-weight: 500 !important;
+        font-weight: 500 !重要;
     }
     
     /* ボタンスタイル - ウォームブラウン */
@@ -913,9 +913,31 @@ def main():
     if "cache" not in st.session_state:
         st.session_state.cache = {}  # 要約結果のキャッシュ
     
-    # 🆕 処理中フラグの初期化（なければFalseにする）
+    # 処理中フラグの初期化（なければFalseにする）
     if "processing" not in st.session_state:
         st.session_state.processing = False
+        
+    # 新しい状態変数の追加
+    if "last_options" not in st.session_state:
+        st.session_state.last_options = {}  # 最後に要約したときのオプション
+    
+    if "last_url" not in st.session_state:
+        st.session_state.last_url = ""  # 最後に要約したときのURL
+        
+    if "last_summary" not in st.session_state:
+        st.session_state.last_summary = None  # 最後の要約結果
+        
+    if "last_subtitle_info" not in st.session_state:
+        st.session_state.last_subtitle_info = {}  # 最後の字幕情報
+        
+    if "last_video_id" not in st.session_state:
+        st.session_state.last_video_id = None  # 最後の動画ID
+        
+    if "options_changed" not in st.session_state:
+        st.session_state.options_changed = False  # オプション変更フラグ
+        
+    # ログ出力でデバッグ確認 - 処理状態を確認
+    logger.info(f"🔍 現在の処理状態: processing={st.session_state.processing}")
     
     # フォントを強制的に読み込むための追加処理
     st.markdown("""
@@ -997,12 +1019,44 @@ def main():
         # APIキーを設定
         os.environ["PERPLEXITY_API_KEY"] = api_key
     
+    # 現在のオプションを取得 - ⚠️ 重要: ここで必ず定義する！
+    current_options = {
+        "length": length,
+        "style": style,
+        "explanation": explanation
+    }
+    
+    # URLが同じで、前回のオプションと現在のオプションが違う場合はフラグを立てる
+    if (st.session_state.last_url == url and url and 
+        st.session_state.last_options and 
+        st.session_state.last_options != current_options and
+        st.session_state.last_summary is not None):
+        st.session_state.options_changed = True
+    else:
+        st.session_state.options_changed = False
+    
+    # オプション変更時の警告表示
+    if st.session_state.options_changed:
+        st.warning("""
+        ## ⚠️ オプション変更を検出したよ！
+        
+        要約のスタイルや長さを変更したね！前回の結果はそのまま表示してるよ✨
+        
+        **新しいオプションで要約を生成したい場合は「要約スタート」ボタンを押してね！**
+        """)
+    
     # 更新履歴セクション
     st.sidebar.markdown("---")
     st.sidebar.title("📅 更新履歴")
     
     update_history = """
     ### 🎉 最新アップデート
+    **2025.04.10**
+    - 要約スタイルを変更しても、既存の出力結果を保持
+    - [予告]LLMをGeminiに変更予定✨
+    - [予告]新キャラ参戦予定✨
+
+
     **2025.04.09**
     - ⚒️ [お詫び]🥹APIレート制限のおわび🥹
     - 🧋 要約開始ボタンの連続押下防止
@@ -1023,13 +1077,16 @@ def main():
     
     st.sidebar.markdown(update_history)
     
-    # 🆕 処理中はボタンを無効化＆テキスト変更するよ💁‍♀️
+    # 処理中はボタンを無効化＆テキスト変更するよ💁‍♀️
     if st.session_state.processing:
         submit_button = st.button(
             "⏳ 処理中だよ！ちょっと待ってね...", 
             disabled=True,
             use_container_width=True
         )
+        
+        # 処理中の情報メッセージも表示
+        st.info("⏳ 動画を分析中だよ...ちょっと待っててね〜🐢", icon="⏳")
     else:
         submit_button = st.button(
             "✨ 要約スタート！", 
@@ -1037,6 +1094,7 @@ def main():
         )
     
     # ==================== 処理セクション ====================
+    # 🔄 処理実行の部分だけ抜き出して書き直し
     if submit_button and not st.session_state.processing:
         if not url:
             st.error("YouTubeのURLを入力してね！🙏")
@@ -1045,27 +1103,25 @@ def main():
         elif not api_key:
             st.error("Perplexity APIキーを入力してね！🙏")
         else:
-            # 🆕 処理開始時にフラグをTrueに設定
+            # ⚠️ ここ重要！処理状態を変更
             st.session_state.processing = True
             
-            # 🆕 ユーザーに状態を伝えるためのプレースホルダーを作成
-            status_container = st.empty()
-            status_container.info("処理を開始します...もうちょい待ってね💕")
+            # 最後のURLとオプションを保存（後でオプション変更検出に使う）
+            st.session_state.last_url = url
+            st.session_state.last_options = current_options.copy()  # ⚠️ current_optionsがここで使われる
             
-            # ページを再読み込みして、ボタンを無効化状態に更新
+            # 処理状態変更をログ出力
+            logger.info(f"⏳ 処理開始: processing={st.session_state.processing}")
+            
+            # ページを再読み込みして処理状態を反映
             st.rerun()
-            
-            # ここからは実際の処理は実行されないけど、
-            # 念のため他のコードを残しておく（st.rerunで再読み込みされるため）
     
-    # rerun後の処理（処理中フラグがTrueの場合の処理）
+    # 👇 処理本体部分 - processingフラグがTrueのときに実行
     if st.session_state.processing:
-        # オプション設定
-        options = {
-            "length": length,
-            "style": style,
-            "explanation": explanation
-        }
+        logger.info("🔄 処理実行中...")
+        
+        # オプション設定 - 変数もう定義されてるから再度設定する必要なし
+        options = current_options  # ⚠️ 既に定義済みのcurrent_optionsを使う
         
         # キャッシュキー生成
         cache_key = get_cache_key(url, options)
@@ -1078,13 +1134,21 @@ def main():
             video_id = cached_result.get("video_id")
             subtitle_info = cached_result.get("subtitle_info", {})
             
-            # 🆕 処理完了したのでフラグを元に戻す
+            # 結果をセッションに保存
+            st.session_state.last_summary = summary
+            st.session_state.last_video_id = video_id
+            st.session_state.last_subtitle_info = subtitle_info
+            
+            # 処理完了したのでフラグを元に戻す
             st.session_state.processing = False
+            
+            # ⚠️ キャッシュヒット時はrerunせずに続行
+            
         else:
             # ローディング表示
-            with st.spinner("動画を分析中...ちょっと待っててね〜🐢"):
+            with st.spinner("動画の字幕を取得して要約してるところ...ちょっと待っててね〜🐢"):
                 try:
-                    # 🆕 実行前にログを出力
+                    # 実行前にログを出力
                     logger.info(f"🚀 要約処理開始: URL={url}")
                     
                     # 直接関数を呼び出し（APIリクエストではない）
@@ -1103,28 +1167,39 @@ def main():
                         "timestamp": time.time()
                     }
                     
+                    # 結果をセッションに保存
+                    st.session_state.last_summary = summary
+                    st.session_state.last_video_id = video_id
+                    st.session_state.last_subtitle_info = subtitle_info
+                    
                     st.success("要約完了！✨")
                     logger.info("✅ 全処理完了、結果を表示します")
                     
-                    # 🆕 処理完了したのでフラグを元に戻す
+                    # 処理完了したのでフラグを元に戻す
                     st.session_state.processing = False
+                    
+                    # ⚠️ 処理完了後にページをrerun（st.rerun()）しない！
+                    # 結果を表示したまま続行する
+                    
                 except ValueError as e:
                     st.error(str(e))
                     logger.error(f"❌ エラーで処理中断: {str(e)}")
                     
-                    # 🆕 エラー発生時もフラグを元に戻す
+                    # エラー発生時もフラグを元に戻す
                     st.session_state.processing = False
                     return
+    
+    # 👇 結果表示部分 - 処理中か否かにかかわらず最後の結果があれば表示
+    if st.session_state.last_summary:
+        # 動画埋め込み表示（最後のURLから）
+        if st.session_state.last_url:
+            embed_url = get_youtube_embed_url(st.session_state.last_url)
+            if embed_url:
+                st.markdown('<h2 class="sub-title">📺 参照動画</h2>', unsafe_allow_html=True)
+                st.components.v1.iframe(embed_url, height=315)
         
-        # ==================== 結果表示セクション ====================
-        
-        # 動画埋め込み表示（利用可能な場合）
-        embed_url = get_youtube_embed_url(url)
-        if embed_url:
-            st.markdown('<h2 class="sub-title">📺 参照動画</h2>', unsafe_allow_html=True)
-            st.components.v1.iframe(embed_url, height=315)
-        
-        # 🆕 字幕情報の表示
+        # 字幕情報の表示
+        subtitle_info = st.session_state.last_subtitle_info
         if subtitle_info:
             st.markdown('<h2 class="sub-title">🗣️ 字幕情報</h2>', unsafe_allow_html=True)
             
@@ -1155,14 +1230,24 @@ def main():
         
         # 要約結果表示
         st.markdown('<h2 class="sub-title">📝 要約結果</h2>', unsafe_allow_html=True)
-        st.markdown(summary)
         
-        # メタデータ表示
-        st.markdown('<p class="status-message">要約スタイル: ' + 
-                  get_display_label(SUMMARY_STYLES, "label", style, "箇条書き") +
-                  ' / 長さ: ' + get_display_label(SUMMARY_LENGTHS, "label", length, "普通") +
-                  ' / ポイント解説: ' + get_display_label(SUMMARY_EXPLANATIONS, "label", explanation, "いれない") +
-                  '</p>', unsafe_allow_html=True)
+        # オプション変更があった場合は注意書きを表示
+        if st.session_state.options_changed:
+            st.info("⚠️ **注意**: これは前回のオプション設定での要約結果だよ！新しい設定で生成するには「要約スタート」ボタンを押してね！", icon="ℹ️")
+            
+        st.markdown(st.session_state.last_summary)
+        
+        # メタデータ表示（前回のオプション情報を表示）
+        if st.session_state.last_options:
+            last_style = st.session_state.last_options.get("style", SUMMARY_STYLE_BULLET)
+            last_length = st.session_state.last_options.get("length", SUMMARY_LENGTH_MEDIUM)
+            last_explanation = st.session_state.last_options.get("explanation", SUMMARY_EXPLANATION_YES)
+            
+            st.markdown('<p class="status-message">要約スタイル: ' + 
+                      get_display_label(SUMMARY_STYLES, "label", last_style, "箇条書き") +
+                      ' / 長さ: ' + get_display_label(SUMMARY_LENGTHS, "label", last_length, "普通") +
+                      ' / ポイント解説: ' + get_display_label(SUMMARY_EXPLANATIONS, "label", last_explanation, "いれない") +
+                      '</p>', unsafe_allow_html=True)
     
     # ==================== フッターセクション ====================
     st.markdown('<div class="footer" style="font-family: \'Noto Sans JP\', sans-serif; font-weight: 500;">Created with ❤️ by YouTube要約くん | ' + 
