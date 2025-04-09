@@ -208,7 +208,7 @@ st.markdown("""
         color: var(--text-light);
         font-size: 0.8em;
         font-family: 'Inconsolata', 'Noto Sans JP', sans-serif !important;
-        font-weight: 500 !important;
+        font-weight: 500 !重要;
     }
     
     /* ボタンスタイル - ウォームブラウン */
@@ -941,6 +941,7 @@ def main():
     このアプリはホビープロジェクトなんで、API制限に優しくしてあげてね～😘
     """)
     
+    st.markdown('<p style="font-family: \'Noto Sans JP\', sans-serif; font-weight: 500;">🙇要約リクエストが重なるとダウンするで。そんときはまた明日カムバック🙇</p>', unsafe_allow_html=True)
 
     # ==================== 入力セクション ====================
     col1 = st.columns([1])[0]
@@ -998,7 +999,9 @@ def main():
     
     update_history = """
     ### 🎉 最新アップデート
-    
+    **2025.04.09**
+    - ⚒️ [お詫び]🥹APIレート制限のおわび🥹
+
     **2025.04.08**
     - ⚒️ [ポイント解説]いれる？のオプションの不具合修正
 
