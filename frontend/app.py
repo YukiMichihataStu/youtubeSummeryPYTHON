@@ -924,6 +924,23 @@ def main():
     # ==================== ヘッダーセクション ====================
     st.markdown('<h1 class="main-title">🎬 YouTube要約くん</h1>', unsafe_allow_html=True)
     st.markdown('<p style="font-family: \'Noto Sans JP\', sans-serif; font-weight: 500;">YouTubeの内容を要約するで🍰ギャル要約オプションで気分もアガる🖖🏾</p>', unsafe_allow_html=True)
+    
+    # ⚠️ 警告メッセージを追加（目立つスタイルで表示） ⚠️
+    st.warning("""
+    ## ⚠️ デプロイ環境での制限についてのお知らせ ⚠️
+    
+    **YouTubeの字幕APIにレート制限がかかっている可能性があるよ～！😱**
+    
+    デプロイ環境では多くのユーザーがアクセスするため、YouTubeのAPIレート制限に引っかかりやすいんだ～💦
+    
+    👇 エラーが出たときの対処法 👇
+    - **別の動画で試してみる** 🎬 (特に公式チャンネルの動画がおすすめ！)
+    - **時間をおいてから再度試す** ⏰ (数時間後や翌日に)
+    - **ローカル環境で実行する** 💻 (プログラマー向け)
+    
+    このアプリはホビープロジェクトなんで、API制限に優しくしてあげてね～😘
+    """)
+    
     st.markdown('<p style="font-family: \'Noto Sans JP\', sans-serif; font-weight: 500;">🙇要約リクエストが重なるとダウンするで。そんときはまた明日カムバック🙇</p>', unsafe_allow_html=True)
 
     # ==================== 入力セクション ====================
