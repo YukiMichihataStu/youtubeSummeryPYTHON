@@ -208,7 +208,7 @@ st.markdown("""
         color: var(--text-light);
         font-size: 0.8em;
         font-family: 'Inconsolata', 'Noto Sans JP', sans-serif !important;
-        font-weight: 500 !重要;
+        font-weight: 500 !important;
     }
     
     /* ボタンスタイル - ウォームブラウン */
@@ -743,7 +743,7 @@ class SummaryService:
                     self.api_url,
                     headers=self.headers,
                     json=payload,
-                    timeout=30
+                    timeout=60
                 )
                 
                 # レスポンス内容をログに出力しておく（デバッグ用）
@@ -913,6 +913,10 @@ def main():
     if "cache" not in st.session_state:
         st.session_state.cache = {}  # 要約結果のキャッシュ
     
+    # 🆕 処理中フラグの初期化（なければFalseにする）
+    if "processing" not in st.session_state:
+        st.session_state.processing = False
+    
     # フォントを強制的に読み込むための追加処理
     st.markdown("""
     <div style="position: absolute; opacity: 0; pointer-events: none">
@@ -1001,6 +1005,7 @@ def main():
     ### 🎉 最新アップデート
     **2025.04.09**
     - ⚒️ [お詫び]🥹APIレート制限のおわび🥹
+    - 🧋 要約開始ボタンの連続押下防止
 
     **2025.04.08**
     - ⚒️ [ポイント解説]いれる？のオプションの不具合修正
@@ -1018,11 +1023,21 @@ def main():
     
     st.sidebar.markdown(update_history)
     
-    # 要約スタートボタン
-    submit_button = st.button("✨ 要約スタート！", use_container_width=True)
+    # 🆕 処理中はボタンを無効化＆テキスト変更するよ💁‍♀️
+    if st.session_state.processing:
+        submit_button = st.button(
+            "⏳ 処理中だよ！ちょっと待ってね...", 
+            disabled=True,
+            use_container_width=True
+        )
+    else:
+        submit_button = st.button(
+            "✨ 要約スタート！", 
+            use_container_width=True
+        )
     
     # ==================== 処理セクション ====================
-    if submit_button:
+    if submit_button and not st.session_state.processing:
         if not url:
             st.error("YouTubeのURLを入力してね！🙏")
         elif not validate_youtube_url(url):
@@ -1030,100 +1045,124 @@ def main():
         elif not api_key:
             st.error("Perplexity APIキーを入力してね！🙏")
         else:
-            # オプション設定
-            options = {
-                "length": length,  # 直接内部値を渡す
-                "style": style,    # 直接内部値を渡す
-                "explanation": explanation  # 直接内部値を渡す
-            }
+            # 🆕 処理開始時にフラグをTrueに設定
+            st.session_state.processing = True
             
-            # キャッシュキー生成
-            cache_key = get_cache_key(url, options)
+            # 🆕 ユーザーに状態を伝えるためのプレースホルダーを作成
+            status_container = st.empty()
+            status_container.info("処理を開始します...もうちょい待ってね💕")
             
-            # キャッシュチェック
-            cached_result = st.session_state.cache.get(cache_key)
-            if cached_result and (time.time() - cached_result["timestamp"]) < CACHE_EXPIRY:
-                st.success("キャッシュからの高速表示だよ〜⚡")
-                summary = cached_result["summary"]
-                video_id = cached_result.get("video_id")
-                subtitle_info = cached_result.get("subtitle_info", {})
-            else:
-                # ローディング表示
-                with st.spinner("動画を分析中...ちょっと待っててね〜🐢"):
-                    try:
-                        # 🆕 実行前にログを出力
-                        logger.info(f"🚀 要約処理開始: URL={url}")
-                        
-                        # 直接関数を呼び出し（APIリクエストではない）
-                        result = summarize_video(url, options)
-                        
-                        # 結果の取得
-                        summary = result.get("summary", "要約生成に失敗しちゃった...")
-                        video_id = result.get("video_id")
-                        subtitle_info = result.get("subtitle_info", {})
-                        
-                        # キャッシュに保存
-                        st.session_state.cache[cache_key] = {
-                            "summary": summary,
-                            "video_id": video_id,
-                            "subtitle_info": subtitle_info,
-                            "timestamp": time.time()
-                        }
-                        
-                        st.success("要約完了！✨")
-                        logger.info("✅ 全処理完了、結果を表示します")
-                    except ValueError as e:
-                        st.error(str(e))
-                        logger.error(f"❌ エラーで処理中断: {str(e)}")
-                        return
+            # ページを再読み込みして、ボタンを無効化状態に更新
+            st.rerun()
             
-            # ==================== 結果表示セクション ====================
+            # ここからは実際の処理は実行されないけど、
+            # 念のため他のコードを残しておく（st.rerunで再読み込みされるため）
+    
+    # rerun後の処理（処理中フラグがTrueの場合の処理）
+    if st.session_state.processing:
+        # オプション設定
+        options = {
+            "length": length,
+            "style": style,
+            "explanation": explanation
+        }
+        
+        # キャッシュキー生成
+        cache_key = get_cache_key(url, options)
+        
+        # キャッシュチェック
+        cached_result = st.session_state.cache.get(cache_key)
+        if cached_result and (time.time() - cached_result["timestamp"]) < CACHE_EXPIRY:
+            st.success("キャッシュからの高速表示だよ〜⚡")
+            summary = cached_result["summary"]
+            video_id = cached_result.get("video_id")
+            subtitle_info = cached_result.get("subtitle_info", {})
             
-            # 動画埋め込み表示（利用可能な場合）
-            embed_url = get_youtube_embed_url(url)
-            if embed_url:
-                st.markdown('<h2 class="sub-title">📺 参照動画</h2>', unsafe_allow_html=True)
-                st.components.v1.iframe(embed_url, height=315)
+            # 🆕 処理完了したのでフラグを元に戻す
+            st.session_state.processing = False
+        else:
+            # ローディング表示
+            with st.spinner("動画を分析中...ちょっと待っててね〜🐢"):
+                try:
+                    # 🆕 実行前にログを出力
+                    logger.info(f"🚀 要約処理開始: URL={url}")
+                    
+                    # 直接関数を呼び出し（APIリクエストではない）
+                    result = summarize_video(url, options)
+                    
+                    # 結果の取得
+                    summary = result.get("summary", "要約生成に失敗しちゃった...")
+                    video_id = result.get("video_id")
+                    subtitle_info = result.get("subtitle_info", {})
+                    
+                    # キャッシュに保存
+                    st.session_state.cache[cache_key] = {
+                        "summary": summary,
+                        "video_id": video_id,
+                        "subtitle_info": subtitle_info,
+                        "timestamp": time.time()
+                    }
+                    
+                    st.success("要約完了！✨")
+                    logger.info("✅ 全処理完了、結果を表示します")
+                    
+                    # 🆕 処理完了したのでフラグを元に戻す
+                    st.session_state.processing = False
+                except ValueError as e:
+                    st.error(str(e))
+                    logger.error(f"❌ エラーで処理中断: {str(e)}")
+                    
+                    # 🆕 エラー発生時もフラグを元に戻す
+                    st.session_state.processing = False
+                    return
+        
+        # ==================== 結果表示セクション ====================
+        
+        # 動画埋め込み表示（利用可能な場合）
+        embed_url = get_youtube_embed_url(url)
+        if embed_url:
+            st.markdown('<h2 class="sub-title">📺 参照動画</h2>', unsafe_allow_html=True)
+            st.components.v1.iframe(embed_url, height=315)
+        
+        # 🆕 字幕情報の表示
+        if subtitle_info:
+            st.markdown('<h2 class="sub-title">🗣️ 字幕情報</h2>', unsafe_allow_html=True)
             
-            # 🆕 字幕情報の表示
-            if subtitle_info:
-                st.markdown('<h2 class="sub-title">🗣️ 字幕情報</h2>', unsafe_allow_html=True)
-                
-                # 使用した字幕言語
-                selected_lang = subtitle_info.get("selected_lang", "不明")
-                st.markdown(f"**使用した字幕:** {selected_lang}")
-                
-                # 利用可能な字幕言語
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    manual_langs = subtitle_info.get("manual_languages", [])
-                    if manual_langs:
-                        st.markdown("**📝 手動字幕:**")
-                        for lang in manual_langs:
-                            st.markdown(f"• {lang}")
-                    else:
-                        st.markdown("**📝 手動字幕:** なし")
-                
-                with col2:
-                    generated_langs = subtitle_info.get("generated_languages", [])
-                    if generated_langs:
-                        st.markdown("**🤖 自動生成字幕:**")
-                        for lang in generated_langs:
-                            st.markdown(f"• {lang}")
-                    else:
-                        st.markdown("**🤖 自動生成字幕:** なし")
+            # 使用した字幕言語
+            selected_lang = subtitle_info.get("selected_lang", "不明")
+            st.markdown(f"**使用した字幕:** {selected_lang}")
             
-            # 要約結果表示
-            st.markdown('<h2 class="sub-title">📝 要約結果</h2>', unsafe_allow_html=True)
-            st.markdown(summary)
+            # 利用可能な字幕言語
+            col1, col2 = st.columns(2)
             
-            # メタデータ表示
-            st.markdown('<p class="status-message">要約スタイル: ' + 
-                      get_display_label(SUMMARY_STYLES, "label", style, "箇条書き") +
-                      ' / 長さ: ' + get_display_label(SUMMARY_LENGTHS, "label", length, "普通") +
-                      ' / ポイント解説: ' + get_display_label(SUMMARY_EXPLANATIONS, "label", explanation, "いれない") +
-                      '</p>', unsafe_allow_html=True)
+            with col1:
+                manual_langs = subtitle_info.get("manual_languages", [])
+                if manual_langs:
+                    st.markdown("**📝 手動字幕:**")
+                    for lang in manual_langs:
+                        st.markdown(f"• {lang}")
+                else:
+                    st.markdown("**📝 手動字幕:** なし")
+            
+            with col2:
+                generated_langs = subtitle_info.get("generated_languages", [])
+                if generated_langs:
+                    st.markdown("**🤖 自動生成字幕:**")
+                    for lang in generated_langs:
+                        st.markdown(f"• {lang}")
+                else:
+                    st.markdown("**🤖 自動生成字幕:** なし")
+        
+        # 要約結果表示
+        st.markdown('<h2 class="sub-title">📝 要約結果</h2>', unsafe_allow_html=True)
+        st.markdown(summary)
+        
+        # メタデータ表示
+        st.markdown('<p class="status-message">要約スタイル: ' + 
+                  get_display_label(SUMMARY_STYLES, "label", style, "箇条書き") +
+                  ' / 長さ: ' + get_display_label(SUMMARY_LENGTHS, "label", length, "普通") +
+                  ' / ポイント解説: ' + get_display_label(SUMMARY_EXPLANATIONS, "label", explanation, "いれない") +
+                  '</p>', unsafe_allow_html=True)
     
     # ==================== フッターセクション ====================
     st.markdown('<div class="footer" style="font-family: \'Noto Sans JP\', sans-serif; font-weight: 500;">Created with ❤️ by YouTube要約くん | ' + 
