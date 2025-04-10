@@ -105,7 +105,7 @@ st.markdown("""
     
     /* 英数字を含む可能性が高い要素には両方のフォントを指定（Inconsolataが優先的に使われる） */
     .status-message, .stMetricValue, pre, code, [data-testid="stMetricValue"] {
-        font-family: 'Inconsolata', 'Noto Sans JP', sans-serif !重要;
+        font-family: 'Inconsolata', 'Noto Sans JP', sans-serif !important;
     }
     
     /* ✨ 新しい色彩設定 ✨ */
@@ -208,7 +208,7 @@ st.markdown("""
         color: var(--text-light);
         font-size: 0.8em;
         font-family: 'Inconsolata', 'Noto Sans JP', sans-serif !important;
-        font-weight: 500 !重要;
+        font-weight: 500 !important;
     }
     
     /* ボタンスタイル - ウォームブラウン */
